@@ -427,18 +427,61 @@
     messagesEl.innerHTML = "";
   });
 
-  $("#share-btn").addEventListener("click", async () => {
-    const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(state.room)}`;
-    const shareData = { title: "Ripple 채팅 초대", text: `'${state.room}' 방으로 초대합니다!`, url };
+  function inviteUrl() {
+    return `${location.origin}${location.pathname}?room=${encodeURIComponent(state.room)}`;
+  }
+  function inviteMessage() {
+    return `💬 '${state.room}' 방에서 같이 떠들어요!\n가입 없이 클릭하면 바로 입장 👇\n${inviteUrl()}`;
+  }
+
+  async function copyText(text, okMsg) {
     try {
-      if (navigator.share) { await navigator.share(shareData); return; }
-    } catch (_) { /* 사용자가 취소 → 복사로 폴백 */ }
-    try {
-      await navigator.clipboard.writeText(url);
-      toast("초대 링크를 복사했어요 🔗");
+      await navigator.clipboard.writeText(text);
+      toast(okMsg);
     } catch (_) {
-      prompt("초대 링크를 복사하세요:", url);
+      prompt("복사해서 붙여넣으세요:", text);
     }
+  }
+
+  const shareModal = $("#share-modal");
+  function openShareModal() {
+    const url = inviteUrl();
+    $("#share-room-name").textContent = `'${state.room}'`;
+    $("#share-link-input").value = url;
+    $("#invite-text").value = inviteMessage();
+    // QR 코드 (외부 QR 렌더 API, 브라우저에서 직접 호출)
+    $("#qr-img").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=" + encodeURIComponent(url);
+    shareModal.classList.remove("hidden");
+  }
+  function closeShareModal() { shareModal.classList.add("hidden"); }
+
+  $("#share-btn").addEventListener("click", openShareModal);
+  $("#share-close").addEventListener("click", closeShareModal);
+  shareModal.addEventListener("click", (e) => { if (e.target === shareModal) closeShareModal(); });
+
+  $("#copy-link-btn").addEventListener("click", () => copyText(inviteUrl(), "초대 링크를 복사했어요 🔗"));
+  $("#copy-msg-btn").addEventListener("click", () => copyText(inviteMessage(), "초대 멘트를 복사했어요 ✏️"));
+
+  document.querySelectorAll(".share-target").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const net = btn.dataset.net;
+      const url = inviteUrl();
+      const msg = inviteMessage();
+      if (net === "x") {
+        window.open("https://twitter.com/intent/tweet?text=" + encodeURIComponent(msg), "_blank", "noopener");
+      } else if (net === "telegram") {
+        window.open("https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(`'${state.room}' 방에서 같이 떠들어요!`), "_blank", "noopener");
+      } else if (net === "kakao") {
+        // 카카오 SDK 없이: 멘트 복사 후 카톡에 붙여넣도록 안내
+        await copyText(msg, "초대 멘트 복사 완료! 카톡에 붙여넣으세요 💛");
+      } else { // more → 네이티브 공유 시트
+        if (navigator.share) {
+          try { await navigator.share({ title: "Ripple 채팅 초대", text: msg, url }); } catch (_) {}
+        } else {
+          await copyText(msg, "초대 멘트를 복사했어요 ✏️");
+        }
+      }
+    });
   });
 
   const soundBtn = $("#sound-btn");

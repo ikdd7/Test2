@@ -334,6 +334,94 @@ body {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ===== 공유 모달 ===== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(5, 8, 16, 0.66);
+  backdrop-filter: blur(6px);
+  display: grid; place-items: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  position: relative;
+  width: 100%; max-width: 380px;
+  background: rgba(19, 26, 43, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 26px 24px 22px;
+  box-shadow: var(--shadow);
+  animation: pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  text-align: center;
+}
+.modal-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; color: var(--text-dim);
+  font-size: 28px; line-height: 1; cursor: pointer;
+}
+.modal-close:hover { color: var(--text); }
+.modal-card h3 { font-size: 20px; margin-bottom: 6px; }
+.modal-sub { font-size: 13.5px; color: var(--text-dim); margin-bottom: 18px; }
+.modal-sub strong { color: var(--accent); }
+
+.qr-wrap {
+  width: 176px; height: 176px; margin: 0 auto 18px;
+  background: #fff; border-radius: 16px;
+  display: grid; place-items: center;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.3);
+}
+.qr-wrap img { display: block; border-radius: 8px; }
+
+.link-box {
+  display: flex; gap: 8px; margin-bottom: 16px;
+}
+.link-box input {
+  flex: 1; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 13px;
+  color: var(--text); font-size: 13px;
+}
+.link-box input:focus { outline: none; border-color: var(--accent); }
+.copy-btn {
+  background: var(--accent-grad); color: #fff; font-weight: 700;
+  border: none; border-radius: 12px; padding: 11px 16px;
+  cursor: pointer; font-size: 14px; white-space: nowrap;
+  transition: filter 0.15s, transform 0.1s;
+}
+.copy-btn:hover { filter: brightness(1.08); }
+.copy-btn:active { transform: scale(0.95); }
+.copy-btn.wide { width: 100%; margin-top: 8px; }
+
+.share-targets {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-bottom: 18px;
+}
+.share-target {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 12px 4px; cursor: pointer;
+  color: var(--text-dim); font-size: 11.5px;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s;
+}
+.share-target:hover { background: var(--surface-2); border-color: var(--accent); transform: translateY(-2px); }
+.st-icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 18px; font-weight: 800; color: #fff;
+}
+
+.invite-msg { text-align: left; }
+.invite-msg-label { font-size: 12px; color: var(--text-dim); font-weight: 600; padding-left: 2px; }
+.invite-msg textarea {
+  width: 100%; margin-top: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 13px;
+  color: var(--text); font-size: 13px; line-height: 1.5;
+  resize: none; font-family: inherit;
+}
+.invite-msg textarea:focus { outline: none; border-color: var(--accent); }
+
 @media (max-width: 480px) {
   .join-card { padding: 30px 22px 24px; }
   .msg-body { max-width: 80%; }
