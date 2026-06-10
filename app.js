@@ -1,491 +1,430 @@
 /* ============================================================
- * Ripple · 실시간 채팅
- * 서버리스 실시간 채팅: 공개 MQTT 브로커(WebSocket) 사용
+ * Ripple · 랜덤 1:1 채팅
+ * - 서버리스 매칭: 공개 MQTT 브로커(WebSocket) 위에서 로비/핸드셰이크
+ * - 음성 메시지: MediaRecorder → MQTT 전송 → 재생
+ * - 접속자 수: 관리자(?admin=KEY)만 보는 플로팅 배지
  * 메시지는 어디에도 저장되지 않습니다.
  * ============================================================ */
-
 (() => {
   "use strict";
 
   // ---------- 설정 ----------
   const BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
-  const TOPIC_PREFIX = "ripple-chat/v1";
-  const PRESENCE_INTERVAL = 8000;   // 하트비트 주기(ms)
-  const PRESENCE_TIMEOUT = 20000;   // 이 시간 이상 응답 없으면 오프라인 처리
+  const P = "ripple-chat/v2";
+  const ADMIN_KEY = "ripple-admin-2026";   // ⚠️ 운영 시 반드시 변경하세요
+  const ONLINE_INTERVAL = 6000;            // 전역 접속 하트비트
+  const ONLINE_TIMEOUT = 15000;
+  const WAIT_INTERVAL = 1500;              // 로비 대기 announce 주기
+  const WAIT_TIMEOUT = 4500;               // 이 시간 지난 대기자는 제외
+  const INVITE_TIMEOUT = 3000;             // 초대 응답 대기
   const TYPING_TIMEOUT = 3000;
+  const VOICE_MAX_BYTES = 200 * 1024;      // 음성 최대 크기(약 200KB)
+  const VOICE_MAX_SEC = 60;
 
   // ---------- 상태 ----------
+  const ST = { IDLE: "idle", SEARCHING: "searching", INVITING: "inviting", CHATTING: "chatting" };
   const state = {
     client: null,
-    nickname: "",
-    room: "",
-    userId: Math.random().toString(36).slice(2, 10),
+    nickname: "익명",
+    id: Math.random().toString(36).slice(2, 10),
     soundOn: true,
-    peers: new Map(),          // userId -> { name, color, lastSeen }
-    typingUsers: new Map(),    // userId -> { name, timer }
+    phase: ST.IDLE,
+    partnerId: null,
+    partnerName: "상대방",
+    pairTopic: null,
+    pendingInvite: null,       // { to, room, timer }
+    waiting: new Map(),        // id -> { name, lastSeen }
+    online: new Map(),         // id -> { st, lastSeen }  (관리자용)
+    typingTimer: null,
     lastSender: null,
     typingSentAt: 0,
+    isAdmin: false,
   };
 
   // ---------- DOM ----------
-  const $ = (sel) => document.querySelector(sel);
-  const joinScreen = $("#join-screen");
+  const $ = (s) => document.querySelector(s);
+  const startScreen = $("#start-screen");
+  const searchScreen = $("#search-screen");
   const chatScreen = $("#chat-screen");
-  const joinForm = $("#join-form");
+  const startForm = $("#start-form");
   const nicknameInput = $("#nickname-input");
-  const roomInput = $("#room-input");
   const avatarBubble = $("#avatar-bubble");
   const avatarName = $("#avatar-name");
   const messagesEl = $("#messages");
   const messageInput = $("#message-input");
   const sendBtn = $("#send-btn");
-  const roomTitle = $("#room-title");
+  const micBtn = $("#mic-btn");
+  const partnerTitle = $("#partner-title");
   const presenceText = $("#presence-text");
   const connDot = $("#conn-dot");
   const typingIndicator = $("#typing-indicator");
-  const typingText = $("#typing-text");
   const toastEl = $("#toast");
+  const leftOverlay = $("#left-overlay");
+  const recordingBar = $("#recording-bar");
+  const recTime = $("#rec-time");
+  const composer = $("#composer");
 
   // ---------- 유틸 ----------
-  const AVATAR_COLORS = [
-    "#ff6b6b", "#f59e0b", "#fbbf24", "#34d399", "#22d3ee",
-    "#60a5fa", "#818cf8", "#a78bfa", "#e879f9", "#fb7185",
-    "#2dd4bf", "#4ade80",
-  ];
-
+  const COLORS = ["#ff6b6b","#f59e0b","#fbbf24","#34d399","#22d3ee","#60a5fa","#818cf8","#a78bfa","#e879f9","#fb7185","#2dd4bf","#4ade80"];
   function colorFor(name) {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    let h = 0; for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return COLORS[Math.abs(h) % COLORS.length];
   }
-
-  function initialOf(name) {
-    const trimmed = (name || "?").trim();
-    return trimmed ? [...trimmed][0].toUpperCase() : "?";
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  // URL 자동 링크 처리 (escape 후 적용)
-  function linkify(escaped) {
-    return escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) =>
-      `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">${url}</a>`
-    );
-  }
-
-  function timeNow() {
-    return new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function topic(kind) {
-    return `${TOPIC_PREFIX}/${encodeURIComponent(state.room)}/${kind}`;
-  }
+  function initialOf(name) { const t = (name || "?").trim(); return t ? [...t][0].toUpperCase() : "?"; }
+  function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function linkify(e) { return e.replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">${u}</a>`); }
+  function timeNow() { return new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }); }
+  const inbox = (id) => `${P}/u/${id}`;
+  const LOBBY = `${P}/lobby`;
+  const ONLINE = `${P}/online`;
+  const pairTopicOf = (room) => `${P}/p/${room}`;
+  const roomIdOf = (a, b) => [a, b].sort().join("_");
 
   function toast(msg) {
     toastEl.textContent = msg;
     toastEl.classList.remove("hidden");
     requestAnimationFrame(() => toastEl.classList.add("show"));
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => {
-      toastEl.classList.remove("show");
-      setTimeout(() => toastEl.classList.add("hidden"), 280);
-    }, 2200);
+    toast._t = setTimeout(() => { toastEl.classList.remove("show"); setTimeout(() => toastEl.classList.add("hidden"), 280); }, 2400);
   }
-
   function scrollToBottom(force) {
-    const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 160;
-    if (force || nearBottom) {
-      requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
-    }
+    const near = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 160;
+    if (force || near) requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
   }
 
-  // ---------- 알림음 (WebAudio, 외부 파일 불필요) ----------
+  // ---------- 알림음 ----------
   let audioCtx = null;
   function beep() {
     if (!state.soundOn) return;
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const t = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(660, t);
-      osc.frequency.exponentialRampToValueAtTime(880, t + 0.08);
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      const t = audioCtx.currentTime, osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+      osc.connect(g); g.connect(audioCtx.destination); osc.type = "sine";
+      osc.frequency.setValueAtTime(660, t); osc.frequency.exponentialRampToValueAtTime(880, t + 0.08);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
       osc.start(t); osc.stop(t + 0.24);
-    } catch (_) { /* 무시 */ }
+    } catch (_) {}
   }
 
-  // ---------- 입장 화면 미리보기 ----------
-  function updateAvatarPreview() {
-    const name = nicknameInput.value.trim();
-    avatarBubble.textContent = initialOf(name);
-    avatarBubble.style.background = name ? colorFor(name) : "#444";
-    avatarName.textContent = name || "미리보기";
+  // ---------- 시작 화면 미리보기 ----------
+  function curNick() { return (nicknameInput.value.trim() || "익명"); }
+  function updatePreview() {
+    const n = curNick();
+    avatarBubble.textContent = initialOf(n);
+    avatarBubble.style.background = colorFor(n);
+    avatarName.textContent = n;
   }
-  nicknameInput.addEventListener("input", updateAvatarPreview);
+  nicknameInput.addEventListener("input", updatePreview);
+  try { const s = localStorage.getItem("ripple_nick"); if (s) nicknameInput.value = s; } catch (_) {}
+  updatePreview();
 
-  document.querySelectorAll(".chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      roomInput.value = chip.dataset.room;
-      nicknameInput.focus();
-    });
-  });
+  // ---------- 화면 전환 ----------
+  function show(screen) {
+    startScreen.classList.toggle("hidden", screen !== "start");
+    searchScreen.classList.toggle("hidden", screen !== "search");
+    chatScreen.classList.toggle("hidden", screen !== "chat");
+  }
 
-  // URL ?room= 자동 채우기
-  const params = new URLSearchParams(location.search);
-  if (params.get("room")) roomInput.value = params.get("room");
-  // 저장된 닉네임 복원
-  try {
-    const saved = localStorage.getItem("ripple_nick");
-    if (saved) { nicknameInput.value = saved; updateAvatarPreview(); }
-  } catch (_) {}
-
-  // ---------- 입장 ----------
-  joinForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const nick = nicknameInput.value.trim();
-    const room = roomInput.value.trim();
-    if (!nick || !room) return;
-
-    state.nickname = nick;
-    state.room = room;
-    try { localStorage.setItem("ripple_nick", nick); } catch (_) {}
-
-    connect();
-  });
-
-  // ---------- MQTT 연결 ----------
+  // ---------- MQTT 연결 (페이지 로드 시) ----------
   function connect() {
-    joinScreen.classList.add("hidden");
-    chatScreen.classList.remove("hidden");
-    roomTitle.textContent = "# " + state.room;
-    messageInput.focus();
-    setConn("connecting");
-    renderEmptyState();
-
-    const willPayload = JSON.stringify({
-      type: "leave", id: state.userId, name: state.nickname,
-    });
-
     state.client = mqtt.connect(BROKER_URL, {
-      clientId: "ripple_" + state.userId + "_" + Date.now().toString(36),
-      clean: true,
-      reconnectPeriod: 2500,
-      connectTimeout: 12000,
-      keepalive: 30,
-      will: {
-        topic: topic("presence"),
-        payload: willPayload,
-        qos: 0,
-        retain: false,
-      },
+      clientId: "ripple_" + state.id + "_" + Date.now().toString(36),
+      clean: true, reconnectPeriod: 2500, connectTimeout: 12000, keepalive: 30,
+      will: { topic: inbox("_gone"), payload: JSON.stringify({ id: state.id }), qos: 0 },
     });
-
     state.client.on("connect", () => {
-      setConn("online");
-      state.client.subscribe([topic("msg"), topic("presence"), topic("typing")], { qos: 0 });
-      announce("join");
-      sendHeartbeat();
+      state.client.subscribe(inbox(state.id), { qos: 0 });
+      if (state.isAdmin) state.client.subscribe(ONLINE, { qos: 0 });  // 접속자 집계는 관리자만 구독
+      sendOnline();
     });
-
-    state.client.on("reconnect", () => setConn("connecting"));
-    state.client.on("close", () => setConn("offline"));
-    state.client.on("error", (err) => {
-      console.error("MQTT error:", err);
-      setConn("offline");
-    });
-
     state.client.on("message", (t, payload) => {
-      let data;
-      try { data = JSON.parse(payload.toString()); } catch (_) { return; }
-      if (t === topic("msg")) onChatMessage(data);
-      else if (t === topic("presence")) onPresence(data);
-      else if (t === topic("typing")) onTyping(data);
+      let d; try { d = JSON.parse(payload.toString()); } catch (_) { return; }
+      if (t === inbox(state.id)) onInbox(d);
+      else if (t === LOBBY) onLobby(d);
+      else if (t === ONLINE) onOnline(d);
+      else if (state.pairTopic && t === state.pairTopic) onPair(d);
     });
+    state.client.on("error", (e) => console.error("MQTT error", e));
 
-    // 하트비트 + 정리 루프
-    clearInterval(state._hb);
-    state._hb = setInterval(() => {
-      sendHeartbeat();
-      prunePeers();
-    }, PRESENCE_INTERVAL);
+    // 전역 접속 하트비트
+    setInterval(() => { sendOnline(); pruneOnline(); }, ONLINE_INTERVAL);
   }
 
-  function setConn(status) {
-    connDot.className = "dot " + (status === "online" ? "online" : status === "offline" ? "offline" : "");
-    if (status === "online") updatePresenceText();
-    else if (status === "connecting") presenceText.textContent = "연결 중…";
-    else presenceText.textContent = "연결 끊김 · 재연결 시도 중";
+  function publish(topic, obj) {
+    if (state.client && state.client.connected) state.client.publish(topic, JSON.stringify(obj), { qos: 0 });
+  }
+  function sendOnline() { publish(ONLINE, { id: state.id, st: state.phase, t: Date.now() }); }
+
+  // ============================================================
+  //  매칭 (로비 + 핸드셰이크)
+  // ============================================================
+  let waitTimer = null, evalTimer = null;
+
+  function startSearching() {
+    state.phase = ST.SEARCHING;
+    state.partnerId = null; state.pairTopic = null; state.pendingInvite = null;
+    state.waiting.clear();
+    show("search");
+    state.client.subscribe(LOBBY, { qos: 0 });
+    announceWait();
+    clearInterval(waitTimer); waitTimer = setInterval(announceWait, WAIT_INTERVAL);
+    clearInterval(evalTimer); evalTimer = setInterval(evaluateMatch, 1000);
+    sendOnline();
   }
 
-  // ---------- 발신 ----------
-  function publish(kind, obj) {
-    if (!state.client || !state.client.connected) return;
-    state.client.publish(topic(kind), JSON.stringify(obj), { qos: 0 });
+  function stopSearching() {
+    clearInterval(waitTimer); clearInterval(evalTimer);
+    waitTimer = evalTimer = null;
+    publish(LOBBY, { t: "unwait", id: state.id });
+    try { state.client.unsubscribe(LOBBY); } catch (_) {}
   }
 
-  function announce(type) {
-    publish("presence", { type, id: state.userId, name: state.nickname });
+  function announceWait() {
+    if (state.phase !== ST.SEARCHING) return;
+    publish(LOBBY, { t: "wait", id: state.id, name: state.nickname });
   }
 
-  function sendHeartbeat() {
-    publish("presence", { type: "heartbeat", id: state.userId, name: state.nickname });
+  function onLobby(d) {
+    if (!d || d.id === state.id) return;
+    if (d.t === "wait") state.waiting.set(d.id, { name: d.name || "익명", lastSeen: Date.now() });
+    else if (d.t === "unwait") state.waiting.delete(d.id);
+  }
+
+  function evaluateMatch() {
+    if (state.phase !== ST.SEARCHING) return;
+    // 오래된 대기자 제거
+    const now = Date.now();
+    for (const [id, w] of state.waiting) if (now - w.lastSeen > WAIT_TIMEOUT) state.waiting.delete(id);
+    if (state.waiting.size === 0) return;
+    // 가장 작은 id 후보 선택
+    let cand = null;
+    for (const id of state.waiting.keys()) if (cand === null || id < cand) cand = id;
+    if (cand === null) return;
+    // 내 id가 더 작으면 내가 초대, 아니면 초대를 기다림
+    if (state.id < cand) sendInvite(cand);
+  }
+
+  function sendInvite(toId) {
+    const room = roomIdOf(state.id, toId);
+    state.phase = ST.INVITING;
+    const timer = setTimeout(() => {
+      if (state.phase === ST.INVITING) {
+        state.pendingInvite = null;
+        state.waiting.delete(toId);     // 응답 없는 상대 제외
+        state.phase = ST.SEARCHING;
+      }
+    }, INVITE_TIMEOUT);
+    state.pendingInvite = { to: toId, room, timer };
+    publish(inbox(toId), { t: "invite", from: state.id, name: state.nickname, room });
+  }
+
+  function onInbox(d) {
+    if (!d || !d.t) return;
+    switch (d.t) {
+      case "invite": {
+        if (state.phase === ST.SEARCHING) {
+          publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room });
+          beginChat(d.room, d.from, d.name);
+        } else if (state.phase === ST.INVITING) {
+          // 더 작은 id 초대자를 우선 → 내 초대 취소하고 수락
+          if (d.from < state.id && state.pendingInvite) {
+            publish(inbox(state.pendingInvite.to), { t: "cancel", from: state.id });
+            clearTimeout(state.pendingInvite.timer); state.pendingInvite = null;
+            publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room });
+            beginChat(d.room, d.from, d.name);
+          } else {
+            publish(inbox(d.from), { t: "busy", from: state.id });
+          }
+        } else {
+          publish(inbox(d.from), { t: "busy", from: state.id });
+        }
+        break;
+      }
+      case "accept": {
+        if (state.phase === ST.INVITING && state.pendingInvite && d.from === state.pendingInvite.to) {
+          const room = state.pendingInvite.room;
+          clearTimeout(state.pendingInvite.timer); state.pendingInvite = null;
+          beginChat(room, d.from, d.name);
+        } else {
+          publish(inbox(d.from), { t: "busy", from: state.id });   // 이미 매칭됨
+        }
+        break;
+      }
+      case "busy":
+      case "cancel": {
+        if (state.phase === ST.INVITING && state.pendingInvite && d.from === state.pendingInvite.to) {
+          clearTimeout(state.pendingInvite.timer);
+          state.waiting.delete(d.from);
+          state.pendingInvite = null;
+          state.phase = ST.SEARCHING;
+        }
+        break;
+      }
+    }
+  }
+
+  function beginChat(room, partnerId, partnerName) {
+    stopSearching();
+    state.phase = ST.CHATTING;
+    state.partnerId = partnerId;
+    state.partnerName = partnerName || "상대방";
+    state.pairTopic = pairTopicOf(room);
+    state.lastSender = null;
+    state.client.subscribe(state.pairTopic, { qos: 0 });
+    messagesEl.innerHTML = "";
+    partnerTitle.textContent = state.partnerName;
+    setConn(true);
+    renderSystem("상대와 연결되었어요! 인사를 건네보세요 👋");
+    show("chat");
+    messageInput.focus();
+    sendOnline();
+    // 인사용 핑(상대가 내 이름 알도록)
+    publish(state.pairTopic, { t: "hello", from: state.id, name: state.nickname });
+  }
+
+  function setConn(ok) {
+    connDot.className = "dot " + (ok ? "online" : "offline");
+    presenceText.textContent = ok ? "익명으로 연결됨" : "연결 끊김";
+  }
+
+  // ============================================================
+  //  1:1 채팅
+  // ============================================================
+  function onPair(d) {
+    if (!d || d.from === state.id) return;
+    switch (d.t) {
+      case "hello":
+        if (d.name && d.name !== state.partnerName) { state.partnerName = d.name; partnerTitle.textContent = d.name; }
+        break;
+      case "msg": renderMessage(d, false); beep(); break;
+      case "voice": renderVoice(d, false); beep(); break;
+      case "typing": onTyping(d); break;
+      case "bye": partnerLeft(); break;
+    }
   }
 
   function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text) return;
-    const msg = {
-      type: "msg",
-      id: state.userId,
-      name: state.nickname,
-      text,
-      ts: Date.now(),
-    };
-    publish("msg", msg);
+    if (!text || state.phase !== ST.CHATTING) return;
+    const msg = { t: "msg", from: state.id, name: state.nickname, text, ts: Date.now() };
+    publish(state.pairTopic, msg);
     renderMessage(msg, true);
-    messageInput.value = "";
-    sendBtn.disabled = true;
-    publish("typing", { type: "stop", id: state.userId, name: state.nickname });
+    messageInput.value = ""; sendBtn.disabled = true;
+    publish(state.pairTopic, { t: "typing", from: state.id, state: "stop" });
   }
-
   sendBtn.addEventListener("click", sendMessage);
-  messageInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  });
+  messageInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
   messageInput.addEventListener("input", () => {
     sendBtn.disabled = !messageInput.value.trim();
+    if (state.phase !== ST.CHATTING) return;
     const now = Date.now();
-    if (now - state.typingSentAt > 1500) {
-      state.typingSentAt = now;
-      publish("typing", { type: "start", id: state.userId, name: state.nickname });
-    }
+    if (now - state.typingSentAt > 1500) { state.typingSentAt = now; publish(state.pairTopic, { t: "typing", from: state.id, state: "start" }); }
   });
   sendBtn.disabled = true;
 
-  // ---------- 수신: 메시지 ----------
-  function onChatMessage(data) {
-    if (data.id === state.userId) return; // 내 메시지는 이미 렌더됨
-    // 새 사용자면 presence에 등록
-    if (!state.peers.has(data.id)) {
-      state.peers.set(data.id, { name: data.name, color: colorFor(data.name), lastSeen: Date.now() });
-      updatePresenceText();
-    }
-    renderMessage(data, false);
-    beep();
-  }
-
-  // ---------- 수신: 접속 상태 ----------
-  function onPresence(data) {
-    if (data.id === state.userId) return;
-    if (data.type === "leave") {
-      if (state.peers.has(data.id)) {
-        state.peers.delete(data.id);
-        renderSystem(`${data.name || "누군가"}님이 나갔어요`);
-        updatePresenceText();
-      }
-      return;
-    }
-    // join / heartbeat
-    const isNew = !state.peers.has(data.id);
-    state.peers.set(data.id, { name: data.name, color: colorFor(data.name), lastSeen: Date.now() });
-    if (isNew) {
-      renderSystem(`${data.name}님이 들어왔어요 👋`);
-      // 새로 들어온 사람에게 내 존재를 즉시 알림
-      announce("join");
-    }
-    updatePresenceText();
-  }
-
-  function prunePeers() {
-    const now = Date.now();
-    let changed = false;
-    for (const [id, p] of state.peers) {
-      if (now - p.lastSeen > PRESENCE_TIMEOUT) { state.peers.delete(id); changed = true; }
-    }
-    if (changed) updatePresenceText();
-  }
-
-  function updatePresenceText() {
-    const count = state.peers.size + 1; // 나 포함
-    presenceText.textContent = `${count}명 접속 중`;
-  }
-
-  // ---------- 수신: 타이핑 ----------
-  function onTyping(data) {
-    if (data.id === state.userId) return;
-    if (data.type === "stop") {
-      const entry = state.typingUsers.get(data.id);
-      if (entry) clearTimeout(entry.timer);
-      state.typingUsers.delete(data.id);
-    } else {
-      const existing = state.typingUsers.get(data.id);
-      if (existing) clearTimeout(existing.timer);
-      const timer = setTimeout(() => {
-        state.typingUsers.delete(data.id);
-        renderTyping();
-      }, TYPING_TIMEOUT);
-      state.typingUsers.set(data.id, { name: data.name, timer });
-    }
-    renderTyping();
-  }
-
-  function renderTyping() {
-    const names = [...state.typingUsers.values()].map((u) => u.name);
-    if (names.length === 0) {
-      typingIndicator.classList.add("hidden");
-      return;
-    }
-    let text;
-    if (names.length === 1) text = `${names[0]}님이 입력 중…`;
-    else if (names.length === 2) text = `${names[0]}, ${names[1]}님이 입력 중…`;
-    else text = `${names.length}명이 입력 중…`;
-    typingText.textContent = text;
+  // 타이핑 표시
+  function onTyping(d) {
+    if (d.state === "stop") { typingIndicator.classList.add("hidden"); clearTimeout(state.typingTimer); return; }
     typingIndicator.classList.remove("hidden");
+    clearTimeout(state.typingTimer);
+    state.typingTimer = setTimeout(() => typingIndicator.classList.add("hidden"), TYPING_TIMEOUT);
   }
 
   // ---------- 렌더링 ----------
-  function renderEmptyState() {
-    messagesEl.innerHTML = `
-      <div class="empty-state" id="empty-state">
-        <div class="big">🌊</div>
-        <p><strong>${escapeHtml(state.room)}</strong> 방에 입장했어요.<br/>
-        첫 메시지를 남겨보세요!<br/>
-        <span style="font-size:12px;opacity:.7">상단 공유 버튼으로 친구를 초대할 수 있어요.</span></p>
-      </div>`;
-  }
-
-  function clearEmptyState() {
-    const es = $("#empty-state");
-    if (es) es.remove();
+  function rowFor(isMe, grouped) {
+    const row = document.createElement("div");
+    row.className = "msg-row " + (isMe ? "me" : "") + (grouped ? " grouped" : "");
+    const avatar = document.createElement("div");
+    const name = isMe ? state.nickname : state.partnerName;
+    if (grouped) avatar.className = "msg-avatar spacer";
+    else { avatar.className = "msg-avatar"; avatar.style.background = colorFor(name); avatar.textContent = initialOf(name); }
+    const body = document.createElement("div"); body.className = "msg-body";
+    row.appendChild(avatar); row.appendChild(body);
+    return { row, body };
   }
 
   function renderMessage(data, isMe) {
-    clearEmptyState();
-    const grouped = state.lastSender === (isMe ? "me" : data.id);
-    state.lastSender = isMe ? "me" : data.id;
-
-    const row = document.createElement("div");
-    row.className = "msg-row " + (isMe ? "me" : "") + (grouped ? " grouped" : "");
-
-    const color = isMe ? colorFor(state.nickname) : colorFor(data.name);
-
-    const avatar = document.createElement("div");
-    if (grouped) {
-      avatar.className = "msg-avatar spacer";
-    } else {
-      avatar.className = "msg-avatar";
-      avatar.style.background = color;
-      avatar.textContent = initialOf(data.name);
-    }
-
-    const body = document.createElement("div");
-    body.className = "msg-body";
-
+    const grouped = state.lastSender === (isMe ? "me" : "p");
+    state.lastSender = isMe ? "me" : "p";
+    const { row, body } = rowFor(isMe, grouped);
     const inner = [];
-    if (!isMe && !grouped) inner.push(`<div class="msg-name">${escapeHtml(data.name)}</div>`);
+    if (!isMe && !grouped) inner.push(`<div class="msg-name">${escapeHtml(state.partnerName)}</div>`);
     inner.push(`<div class="bubble">${linkify(escapeHtml(data.text))}</div>`);
     inner.push(`<div class="msg-time">${timeNow()}</div>`);
     body.innerHTML = inner.join("");
+    messagesEl.appendChild(row);
+    scrollToBottom(isMe);
+  }
 
-    row.appendChild(avatar);
-    row.appendChild(body);
+  function renderVoice(data, isMe) {
+    const grouped = state.lastSender === (isMe ? "me" : "p");
+    state.lastSender = isMe ? "me" : "p";
+    const { row, body } = rowFor(isMe, grouped);
+    if (!isMe && !grouped) body.innerHTML = `<div class="msg-name">${escapeHtml(state.partnerName)}</div>`;
+    const dur = data.dur || 0;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble voice-bubble";
+    bubble.innerHTML = `
+      <button class="voice-play" aria-label="재생">▶</button>
+      <span class="voice-wave">${'<i></i>'.repeat(14)}</span>
+      <span class="voice-dur">${fmtTime(dur)}</span>`;
+    const audio = new Audio(data.audio);
+    const playBtn = bubble.querySelector(".voice-play");
+    playBtn.addEventListener("click", () => {
+      if (audio.paused) { audio.play(); playBtn.textContent = "❚❚"; bubble.classList.add("playing"); }
+      else { audio.pause(); playBtn.textContent = "▶"; bubble.classList.remove("playing"); }
+    });
+    audio.addEventListener("ended", () => { playBtn.textContent = "▶"; bubble.classList.remove("playing"); });
+    body.appendChild(bubble);
+    const time = document.createElement("div"); time.className = "msg-time"; time.textContent = timeNow();
+    body.appendChild(time);
     messagesEl.appendChild(row);
     scrollToBottom(isMe);
   }
 
   function renderSystem(text) {
-    clearEmptyState();
     state.lastSender = null;
-    const el = document.createElement("div");
-    el.className = "sys-msg";
-    el.textContent = text;
-    messagesEl.appendChild(el);
-    scrollToBottom(false);
+    const el = document.createElement("div"); el.className = "sys-msg"; el.textContent = text;
+    messagesEl.appendChild(el); scrollToBottom(false);
+  }
+  function fmtTime(sec) { sec = Math.round(sec); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+
+  // ---------- 종료 / 다음 ----------
+  function partnerLeft() {
+    if (state.phase !== ST.CHATTING) return;
+    state.phase = ST.IDLE;
+    if (state.pairTopic) { try { state.client.unsubscribe(state.pairTopic); } catch (_) {} }
+    typingIndicator.classList.add("hidden");
+    leftOverlay.classList.remove("hidden");
+    beep();
   }
 
-  // ---------- 헤더 액션 ----------
-  $("#leave-btn").addEventListener("click", () => {
-    if (state.client) {
-      announce("leave");
-      setTimeout(() => { try { state.client.end(true); } catch (_) {} }, 120);
+  function endChat(silent) {
+    if (state.pairTopic) {
+      if (!silent) publish(state.pairTopic, { t: "bye", from: state.id });
+      try { state.client.unsubscribe(state.pairTopic); } catch (_) {}
     }
-    clearInterval(state._hb);
-    state.peers.clear();
-    state.typingUsers.clear();
-    state.lastSender = null;
-    chatScreen.classList.add("hidden");
-    joinScreen.classList.remove("hidden");
-    messagesEl.innerHTML = "";
+    state.pairTopic = null; state.partnerId = null;
+    typingIndicator.classList.add("hidden");
+    if (recState.recording) cancelRecording();
+  }
+
+  $("#next-btn").addEventListener("click", () => { endChat(false); startSearching(); });
+  $("#leave-btn").addEventListener("click", () => { endChat(false); state.phase = ST.IDLE; sendOnline(); show("start"); });
+  $("#cancel-search-btn").addEventListener("click", () => { stopSearching(); state.phase = ST.IDLE; sendOnline(); show("start"); });
+  $("#find-next-btn").addEventListener("click", () => { leftOverlay.classList.add("hidden"); startSearching(); });
+  $("#go-home-btn").addEventListener("click", () => { leftOverlay.classList.add("hidden"); state.phase = ST.IDLE; sendOnline(); show("start"); });
+
+  // 시작
+  startForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    state.nickname = curNick();
+    try { localStorage.setItem("ripple_nick", state.nickname); } catch (_) {}
+    startSearching();
   });
 
-  function inviteUrl() {
-    return `${location.origin}${location.pathname}?room=${encodeURIComponent(state.room)}`;
-  }
-  function inviteMessage() {
-    return `💬 '${state.room}' 방에서 같이 떠들어요!\n가입 없이 클릭하면 바로 입장 👇\n${inviteUrl()}`;
-  }
-
-  async function copyText(text, okMsg) {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast(okMsg);
-    } catch (_) {
-      prompt("복사해서 붙여넣으세요:", text);
-    }
-  }
-
-  const shareModal = $("#share-modal");
-  function openShareModal() {
-    const url = inviteUrl();
-    $("#share-room-name").textContent = `'${state.room}'`;
-    $("#share-link-input").value = url;
-    $("#invite-text").value = inviteMessage();
-    // QR 코드 (외부 QR 렌더 API, 브라우저에서 직접 호출)
-    $("#qr-img").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=" + encodeURIComponent(url);
-    shareModal.classList.remove("hidden");
-  }
-  function closeShareModal() { shareModal.classList.add("hidden"); }
-
-  $("#share-btn").addEventListener("click", openShareModal);
-  $("#share-close").addEventListener("click", closeShareModal);
-  shareModal.addEventListener("click", (e) => { if (e.target === shareModal) closeShareModal(); });
-
-  $("#copy-link-btn").addEventListener("click", () => copyText(inviteUrl(), "초대 링크를 복사했어요 🔗"));
-  $("#copy-msg-btn").addEventListener("click", () => copyText(inviteMessage(), "초대 멘트를 복사했어요 ✏️"));
-
-  document.querySelectorAll(".share-target").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const net = btn.dataset.net;
-      const url = inviteUrl();
-      const msg = inviteMessage();
-      if (net === "x") {
-        window.open("https://twitter.com/intent/tweet?text=" + encodeURIComponent(msg), "_blank", "noopener");
-      } else if (net === "telegram") {
-        window.open("https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(`'${state.room}' 방에서 같이 떠들어요!`), "_blank", "noopener");
-      } else if (net === "kakao") {
-        // 카카오 SDK 없이: 멘트 복사 후 카톡에 붙여넣도록 안내
-        await copyText(msg, "초대 멘트 복사 완료! 카톡에 붙여넣으세요 💛");
-      } else { // more → 네이티브 공유 시트
-        if (navigator.share) {
-          try { await navigator.share({ title: "Ripple 채팅 초대", text: msg, url }); } catch (_) {}
-        } else {
-          await copyText(msg, "초대 멘트를 복사했어요 ✏️");
-        }
-      }
-    });
-  });
-
-  const soundBtn = $("#sound-btn");
-  soundBtn.addEventListener("click", () => {
+  // ---------- 알림음 토글 ----------
+  $("#sound-btn").addEventListener("click", () => {
     state.soundOn = !state.soundOn;
     $("#sound-on").classList.toggle("hidden", !state.soundOn);
     $("#sound-off").classList.toggle("hidden", state.soundOn);
@@ -493,31 +432,155 @@
     toast(state.soundOn ? "알림음 켜짐 🔔" : "알림음 꺼짐 🔕");
   });
 
-  // ---------- 이모지 패널 ----------
+  // ============================================================
+  //  음성 메시지 (MediaRecorder)
+  // ============================================================
+  const recState = { recording: false, recorder: null, chunks: [], stream: null, start: 0, timer: null, mime: "" };
+
+  function pickMime() {
+    const cands = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    for (const m of cands) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    return "";
+  }
+
+  async function startRecording() {
+    if (state.phase !== ST.CHATTING) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) { toast("이 브라우저는 음성 녹음을 지원하지 않아요 😢"); return; }
+    try {
+      recState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (_) { toast("마이크 권한이 필요해요 🎤"); return; }
+    recState.mime = pickMime();
+    recState.chunks = [];
+    recState.recorder = new MediaRecorder(recState.stream, recState.mime ? { mimeType: recState.mime, audioBitsPerSecond: 24000 } : undefined);
+    recState.recorder.ondataavailable = (e) => { if (e.data && e.data.size) recState.chunks.push(e.data); };
+    recState.recorder.onstop = finishRecording;
+    recState.recorder.start();
+    recState.recording = true;
+    recState.start = Date.now();
+    composer.classList.add("hidden");
+    recordingBar.classList.remove("hidden");
+    recState.timer = setInterval(() => {
+      const sec = (Date.now() - recState.start) / 1000;
+      recTime.textContent = fmtTime(sec);
+      if (sec >= VOICE_MAX_SEC) stopRecording();
+    }, 200);
+  }
+
+  function teardownRec() {
+    clearInterval(recState.timer);
+    if (recState.stream) recState.stream.getTracks().forEach((t) => t.stop());
+    recState.recording = false;
+    recordingBar.classList.add("hidden");
+    composer.classList.remove("hidden");
+  }
+
+  function stopRecording() {
+    if (!recState.recording) return;
+    recState._send = true;
+    try { recState.recorder.stop(); } catch (_) { teardownRec(); }
+  }
+  function cancelRecording() {
+    if (!recState.recording) return;
+    recState._send = false;
+    try { recState.recorder.stop(); } catch (_) {}
+    teardownRec();
+  }
+
+  function finishRecording() {
+    const send = recState._send;
+    const dur = (Date.now() - recState.start) / 1000;
+    teardownRec();
+    if (!send || dur < 0.4) return;
+    const blob = new Blob(recState.chunks, { type: recState.mime || "audio/webm" });
+    if (blob.size > VOICE_MAX_BYTES) { toast("음성이 너무 길어요. 더 짧게 보내주세요 🙏"); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result; // data:...;base64,...
+      const msg = { t: "voice", from: state.id, name: state.nickname, audio: dataUrl, dur, ts: Date.now() };
+      if (state.phase === ST.CHATTING && state.pairTopic) {
+        publish(state.pairTopic, msg);
+        renderVoice(msg, true);
+      }
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  micBtn.addEventListener("click", startRecording);
+  $("#rec-send").addEventListener("click", stopRecording);
+  $("#rec-cancel").addEventListener("click", cancelRecording);
+
+  // ---------- 이모지 ----------
   const EMOJIS = ["😀","😂","🥹","😊","😍","😎","🤩","🥳","😅","😭","😡","🤔","👍","👏","🙏","🔥","💯","✨","🎉","❤️","💜","💙","💚","😴","🤯","😱","🙄","😬","🤝","👀","🫶","🙌","💀","🤣","😏","😇","🥰","😘","🤗","🫡"];
   const emojiPanel = $("#emoji-panel");
   emojiPanel.innerHTML = EMOJIS.map((e) => `<button type="button">${e}</button>`).join("");
-  emojiPanel.querySelectorAll("button").forEach((b) => {
-    b.addEventListener("click", () => {
-      messageInput.value += b.textContent;
-      messageInput.focus();
-      sendBtn.disabled = !messageInput.value.trim();
-    });
-  });
-  $("#emoji-btn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    emojiPanel.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (!emojiPanel.contains(e.target) && e.target.id !== "emoji-btn") {
-      emojiPanel.classList.add("hidden");
+  emojiPanel.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    messageInput.value += b.textContent; messageInput.focus(); sendBtn.disabled = !messageInput.value.trim();
+  }));
+  $("#emoji-btn").addEventListener("click", (e) => { e.stopPropagation(); emojiPanel.classList.toggle("hidden"); });
+  document.addEventListener("click", (e) => { if (!emojiPanel.contains(e.target) && e.target.id !== "emoji-btn") emojiPanel.classList.add("hidden"); });
+
+  // ============================================================
+  //  공유 모달 (사이트 공유)
+  // ============================================================
+  const shareModal = $("#share-modal");
+  const siteUrl = () => `${location.origin}${location.pathname}`;
+  const siteMsg = () => `💬 낯선 사람과 1:1로 떠드는 랜덤 채팅 'Ripple'!\n가입 없이 클릭하면 바로 매칭 👇\n${siteUrl()}`;
+  function openShare() {
+    $("#share-link-input").value = siteUrl();
+    $("#invite-text").value = siteMsg();
+    $("#qr-img").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=" + encodeURIComponent(siteUrl());
+    shareModal.classList.remove("hidden");
+  }
+  async function copyText(text, ok) { try { await navigator.clipboard.writeText(text); toast(ok); } catch (_) { prompt("복사하세요:", text); } }
+  $("#open-share-btn").addEventListener("click", openShare);
+  $("#share-close").addEventListener("click", () => shareModal.classList.add("hidden"));
+  shareModal.addEventListener("click", (e) => { if (e.target === shareModal) shareModal.classList.add("hidden"); });
+  $("#copy-link-btn").addEventListener("click", () => copyText(siteUrl(), "링크를 복사했어요 🔗"));
+  $("#copy-msg-btn").addEventListener("click", () => copyText(siteMsg(), "공유 멘트를 복사했어요 ✏️"));
+
+  // ============================================================
+  //  관리자 전용 접속자 수
+  // ============================================================
+  function initAdmin() {
+    const key = new URLSearchParams(location.search).get("admin");
+    if (key && key === ADMIN_KEY) {
+      state.isAdmin = true;
+      $("#admin-badge").classList.remove("hidden");
+      setInterval(renderAdmin, 2000);
     }
-  });
+  }
+  function onOnline(d) {
+    if (!d || !d.id) return;
+    state.online.set(d.id, { st: d.st, lastSeen: Date.now() });
+    if (d.id === state.id) return;
+  }
+  function pruneOnline() {
+    const now = Date.now();
+    for (const [id, o] of state.online) if (now - o.lastSeen > ONLINE_TIMEOUT) state.online.delete(id);
+  }
+  function renderAdmin() {
+    if (!state.isAdmin) return;
+    pruneOnline();
+    // 나 자신도 포함
+    state.online.set(state.id, { st: state.phase, lastSeen: Date.now() });
+    let total = 0, wait = 0, chat = 0;
+    for (const o of state.online.values()) {
+      total++;
+      if (o.st === ST.SEARCHING || o.st === ST.INVITING) wait++;
+      else if (o.st === ST.CHATTING) chat++;
+    }
+    $("#ab-total").textContent = total;
+    $("#ab-wait").textContent = wait;
+    $("#ab-chat").textContent = chat;
+  }
 
-  // ---------- 페이지 종료 시 정리 ----------
+  // ---------- 페이지 종료 ----------
   window.addEventListener("beforeunload", () => {
-    if (state.client && state.client.connected) announce("leave");
+    if (state.phase === ST.CHATTING && state.pairTopic) publish(state.pairTopic, { t: "bye", from: state.id });
+    else if (state.phase === ST.SEARCHING) publish(LOBBY, { t: "unwait", id: state.id });
   });
 
-  updateAvatarPreview();
+  // ---------- 부팅 ----------
+  initAdmin();
+  connect();
 })();

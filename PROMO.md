@@ -3,53 +3,45 @@
 > 그대로 복사해서 붙여넣을 수 있는 홍보 문구 모음입니다.
 > **사이트 주소:** https://ikdd7.github.io/Test2/
 > **공유 카드 이미지:** `og.png` (링크 붙이면 자동으로 뜸)
+> **콘셉트:** 가입 없이 버튼 하나로 **낯선 사람과 1:1 랜덤 채팅** (텍스트 + 음성)
 
 ---
 
 ## 🧭 입소문 전략 3줄 요약
-1. **씨앗 방을 비우지 마세요.** 친구 2~3명과 시간 정해 동시 접속 → "사람이 있는 방"을 먼저 만든다.
-2. **"홍보"하지 말고 "초대"하세요.** "내 사이트 써줘"(X) → "오늘 9시 여기서 보자 [링크]"(O).
-3. **링크 = 무기.** 모든 글에 방 링크를 박아 클릭 한 번에 입장되게 한다. (이미 공유 카드/QR 내장)
+1. **동시 접속이 생명.** 랜덤 매칭은 대기자가 있어야 연결됩니다. 친구들과 시간 정해 "다같이 접속"으로 초기 풀을 만드세요.
+2. **"홍보"하지 말고 "같이 하자".** "심심한데 같이 랜덤채팅 ㄱ?" [링크]
+3. **음성 기능을 후킹 포인트로.** "목소리도 보낼 수 있는 랜덤채팅" 은 차별점이라 잘 퍼집니다.
 
 ---
 
 ## 💛 카카오톡 / 오픈카톡 (전환율 1위)
 ```
-💬 가입 없이 바로 떠드는 익명 채팅방 만들었어요!
-'자유수다방'에서 같이 놀아요 👇 (클릭하면 바로 입장)
-https://ikdd7.github.io/Test2/?room=자유수다방
+💬 가입 없이 낯선 사람이랑 1:1로 떠드는 랜덤채팅 ㄱㄱ
+목소리(음성)도 보낼 수 있음 👇 (클릭하면 바로 매칭)
+https://ikdd7.github.io/Test2/
 ```
 
 ## 📸 인스타 스토리 / 쓰레드
 ```
-심심한 사람 다 들어와 🫠
-익명 실시간 채팅방 열었음. 가입 X, 클릭하면 바로 입장.
-🔗 프로필 링크 or 👉 ikdd7.github.io/Test2
+심심한 사람 다 들어와 🫠 가입 없이 1:1 랜덤채팅.
+텍스트 + 음성까지 됨. 클릭하면 바로 매칭.
+👉 ikdd7.github.io/Test2
 ```
-> 스토리엔 **QR 스티커**(앱 안 공유 버튼의 QR 캡처)를 같이 올리면 전환률 ↑
+> 스토리엔 **QR 스티커**(공유 모달의 QR 캡처)를 같이 올리면 전환율 ↑
 
 ## 🐦 X (트위터)
 ```
-주말에 만든 사이드 프로젝트 💬 "Ripple"
-- 가입 없이 닉네임만 입력하면 1초 입장
-- 방 이름만 같으면 전 세계 누구나 실시간 채팅
-- 서버에 메시지 저장 안 함 (완전 익명)
-
-링크 공유하면 친구가 바로 들어옴 👇
+주말 사이드 프로젝트 💬 "Ripple"
+- 가입 없이 버튼 하나로 낯선 사람과 1:1 랜덤 매칭
+- 텍스트 + 음성 메시지 지원
+- 메시지 저장 안 함 (완전 익명)
 https://ikdd7.github.io/Test2/
-```
-
-## 👾 디시 / 아카라이브 / 인벤 등 주제 갤러리
-해당 갤러리 주제로 방을 만들어 자연스럽게:
-```
-실시간으로 같이 보면서 떠들 방 팠다 🔥 (가입 필요 없음)
-https://ikdd7.github.io/Test2/?room=여기에_갤주제
 ```
 
 ## 🎓 에브리타임 / 대학 커뮤니티
 ```
-시험기간 같이 공부할 사람? 실시간 채팅방 만들었어요 ☕
-가입 없이 바로 들어와요 → https://ikdd7.github.io/Test2/?room=공부방
+시험기간 현타 올 때 잠깐 떠들 사람? 익명 1:1 랜덤채팅 ☕
+가입 없이 바로 매칭 → https://ikdd7.github.io/Test2/
 ```
 
 ---
@@ -57,51 +49,52 @@ https://ikdd7.github.io/Test2/?room=여기에_갤주제
 ## 🌍 글로벌 (영어)
 
 ### Reddit — r/InternetIsBeautiful, r/SideProject, r/webdev
-**Title:** I built a no-signup, real-time chat — share a link and friends join instantly
+**Title:** I built a no-signup, 1:1 random chat with voice messages — instant match, fully anonymous
 ```
-Made a tiny chat site over the weekend: Ripple.
-- No sign-up. Pick a nickname + room name, you're in (1 sec).
-- Anyone with the same room name (or your invite link) chats in real time.
-- No messages stored anywhere — fully ephemeral & anonymous.
-- 100% static site, real-time via public MQTT-over-WebSocket.
+Made a tiny random chat site: Ripple.
+- No sign-up. One button → matched 1:1 with a stranger.
+- Text + voice messages.
+- Nothing stored anywhere — fully ephemeral & anonymous.
+- 100% static site; matchmaking & realtime over MQTT-over-WebSocket.
 
 Try it: https://ikdd7.github.io/Test2/
 ```
 
-### Hacker News (Show HN)
-```
-Show HN: Ripple – no-signup, serverless real-time chat (static site)
-https://ikdd7.github.io/Test2/
-```
-
 ### Product Hunt — tagline & description
-- **Tagline:** No sign-up, real-time chat rooms. Just share a link.
+- **Tagline:** No sign-up 1:1 random chat — with voice messages.
 - **Description:**
 ```
-Ripple is the fastest way to start a group chat. No accounts, no apps —
-type a nickname and a room name, and you're chatting in one second.
-Share the invite link and friends join instantly. Messages are never
-stored, so it's fully ephemeral and anonymous. Built as a static site
-with real-time messaging over WebSocket.
+Ripple instantly matches you 1:1 with a stranger. No accounts, no apps —
+hit one button and you're chatting with text or voice. Nothing is stored,
+so it's fully anonymous and ephemeral. Built as a static site with
+serverless matchmaking over WebSocket.
 ```
 
 ---
 
-## 🪝 잘 먹히는 후킹 멘트(아무 채널에나)
-- "가입하기 귀찮아서 만든 채팅 사이트"
-- "링크 누르면 1초만에 들어오는 익명 톡방"
+## 🪝 후킹 멘트(아무 채널에나)
+- "가입하기 귀찮아서 만든 랜덤채팅 (목소리도 됨)"
+- "버튼 누르면 1초만에 낯선 사람이랑 연결"
 - "메시지 저장 안 됨 = 무슨 말 해도 안 남음 🤫"
-- "친구랑 임시로 떠들 방 필요할 때 딱"
+- "마음 안 들면 '다음 상대' 누르면 끝"
 
 ## ⏰ 런칭 당일 체크리스트
-- [ ] 친구 3명과 "오늘 N시 ○○방" 약속 → 동시 접속
-- [ ] 오픈카톡 2~3곳에 초대 멘트 공유
+- [ ] 친구 여러 명과 "○시 동시 접속" → 매칭 풀 만들기 (랜덤은 대기자 필수!)
+- [ ] 오픈카톡 2~3곳에 공유 멘트
 - [ ] 인스타 스토리 + QR 스티커
 - [ ] X / 쓰레드 1포스트
 - [ ] (영어 가능 시) Reddit r/SideProject 1포스트
-- [ ] 반응 보고 가장 잘 터진 채널에 집중
+
+## 🔑 관리자(나)만 보는 접속자 수
+접속자 수는 일반 사용자에게 안 보입니다. **나만** 보려면 주소 뒤에 관리자 키를 붙이세요:
+```
+https://ikdd7.github.io/Test2/?admin=ripple-admin-2026
+```
+→ 우측 상단에 `🟢 N 온라인 · N 대기 · N 대화` 배지가 나타납니다.
+⚠️ 이 키는 코드(`app.js`의 `ADMIN_KEY`)에 들어있는 값이라 **반드시 본인만 아는 값으로 변경**하세요. (정적 사이트라 완벽한 비밀은 아님 — 가벼운 차단 수준)
 
 ## ⚠️ 터지기 전에 챙길 것
-- 지금은 **무료 공개 브로커**라 대규모 동시접속 시 끊길 수 있음 → 전용 백엔드 검토
-- **방 비밀번호 / 금칙어 / 신고** 기능 없음 → 사람 많아지면 어뷰징 대비 필요
-- 위 두 가지는 요청 주시면 바로 붙여드릴 수 있어요.
+- 지금은 **무료 공개 브로커**라 동시 접속이 크게 늘면 매칭/전송이 끊길 수 있음 → 전용 백엔드 검토
+- 음성은 약 200KB(최대 60초)로 제한 — 더 키우려면 백엔드 필요
+- **신고 / 차단 / 금칙어** 기능 없음 → 사람 많아지면 어뷰징 대비 필요
+- 위 항목들은 요청 주시면 바로 붙여드릴 수 있어요.
