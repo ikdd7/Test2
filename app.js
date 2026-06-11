@@ -44,6 +44,7 @@
     recvTimes: [],     // 최근 수신 시각 (폭주 방어)
     lastText: "",
     repeat: 0,
+    connected: null,   // MQTT 연결 상태
   };
 
   // ---------- DOM ----------
@@ -135,6 +136,24 @@
     chatScreen.classList.toggle("hidden", screen !== "chat");
   }
 
+  // 연결 상태를 UI에 반영
+  function updateConnUI() {
+    const ok = state.connected === true;
+    const startBtn = $("#start-btn");
+    if (startBtn) {
+      startBtn.disabled = !ok;
+      const span = startBtn.querySelector("span");
+      if (span) span.textContent = ok ? "🎲 랜덤 매칭 시작" : "🔌 연결 중…";
+    }
+    if (state.phase === ST.CHATTING) setConn(ok);
+    if (state.phase === ST.SEARCHING) {
+      const sub = $("#search-sub");
+      if (sub) sub.textContent = ok
+        ? "잠시만 기다려 주세요. 접속자가 적으면 시간이 걸릴 수 있어요."
+        : "연결이 끊겨 재연결 중이에요…";
+    }
+  }
+
   // ---------- MQTT 연결 (페이지 로드 시) ----------
   function connect() {
     state.client = mqtt.connect(BROKER_URL, {
@@ -143,10 +162,20 @@
       will: { topic: inbox("_gone"), payload: JSON.stringify({ id: state.id }), qos: 0 },
     });
     state.client.on("connect", () => {
+      const wasDown = state.connected === false;
+      state.connected = true;
+      updateConnUI();
       state.client.subscribe(inbox(state.id), { qos: 0 });
       if (state.isAdmin) state.client.subscribe(ONLINE, { qos: 0 });  // 접속자 집계는 관리자만 구독
+      // 재연결 복구: 진행 중이던 상태의 구독을 되살림
+      if (state.phase === ST.SEARCHING) { state.client.subscribe(LOBBY, { qos: 0 }); announceWait(); }
+      else if (state.phase === ST.CHATTING && state.pairTopic) { state.client.subscribe(state.pairTopic, { qos: 0 }); }
+      if (wasDown) toast("다시 연결됐어요 ✅");
       sendOnline();
     });
+    state.client.on("reconnect", () => { state.connected = false; updateConnUI(); });
+    state.client.on("close", () => { state.connected = false; updateConnUI(); });
+    state.client.on("offline", () => { state.connected = false; updateConnUI(); });
     state.client.on("message", (t, payload) => {
       let d; try { d = JSON.parse(payload.toString()); } catch (_) { return; }
       if (t === inbox(state.id)) onInbox(d);
@@ -154,7 +183,7 @@
       else if (t === ONLINE) onOnline(d);
       else if (state.pairTopic && t === state.pairTopic) onPair(d);
     });
-    state.client.on("error", (e) => console.error("MQTT error", e));
+    state.client.on("error", (e) => { console.error("MQTT error", e); state.connected = false; updateConnUI(); });
 
     // 전역 접속 하트비트
     setInterval(() => { sendOnline(); pruneOnline(); }, ONLINE_INTERVAL);
@@ -491,6 +520,7 @@
   // 시작
   startForm.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (!state.connected) { toast("연결 중이에요. 잠시 후 다시 시도해 주세요 🔌"); return; }
     state.nickname = clean(curNick()).text;
     try { localStorage.setItem("ripple_nick", state.nickname); } catch (_) {}
     startSearching();
@@ -701,5 +731,6 @@
 
   // ---------- 부팅 ----------
   initAdmin();
+  updateConnUI();   // 연결 전: 시작 버튼 비활성 + "연결 중…"
   connect();
 })();
