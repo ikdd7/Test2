@@ -40,6 +40,10 @@
     lastSender: null,
     typingSentAt: 0,
     isAdmin: false,
+    sendTimes: [],     // 최근 전송 시각 (도배 방지)
+    recvTimes: [],     // 최근 수신 시각 (폭주 방어)
+    lastText: "",
+    repeat: 0,
   };
 
   // ---------- DOM ----------
@@ -284,6 +288,7 @@
     state.partnerName = clean(partnerName || "상대방").text;
     state.pairTopic = pairTopicOf(room);
     state.lastSender = null;
+    state.sendTimes = []; state.recvTimes = []; state.lastText = ""; state.repeat = 0;
     state.client.subscribe(state.pairTopic, { qos: 0 });
     messagesEl.innerHTML = "";
     partnerTitle.textContent = state.partnerName;
@@ -317,7 +322,14 @@
         if (nm && nm !== state.partnerName) { state.partnerName = nm; partnerTitle.textContent = nm; }
         break;
       }
-      case "msg": renderMessage(d, false); beep(); break;
+      case "msg": {
+        // 상대 폭주 방어: 5초 15개 초과는 드랍
+        const now = Date.now();
+        state.recvTimes = state.recvTimes.filter((t) => now - t < 5000);
+        if (state.recvTimes.length >= 15) return;
+        state.recvTimes.push(now);
+        renderMessage(d, false); beep(); break;
+      }
       case "voice": renderVoice(d, false); beep(); break;
       case "typing": onTyping(d); break;
       case "bye": partnerLeft(); break;
@@ -327,6 +339,16 @@
   function sendMessage() {
     const raw = messageInput.value.trim();
     if (!raw || state.phase !== ST.CHATTING) return;
+    // 도배 방지: 5초에 6개 초과 차단
+    const now = Date.now();
+    state.sendTimes = state.sendTimes.filter((t) => now - t < 5000);
+    if (state.sendTimes.length >= 6) { toast("조금 천천히 보내주세요 ⏳"); return; }
+    // 같은 메시지 반복 차단
+    if (raw === state.lastText) {
+      if (state.repeat >= 2) { toast("같은 메시지를 반복해서 보낼 수 없어요 🙅"); return; }
+      state.repeat++;
+    } else { state.repeat = 0; state.lastText = raw; }
+    state.sendTimes.push(now);
     const { text, hit } = clean(raw);
     if (hit) toast("부적절한 표현은 가려져요 🙅");
     const msg = { t: "msg", from: state.id, name: state.nickname, text, ts: Date.now() };
