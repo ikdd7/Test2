@@ -22,6 +22,10 @@
 html, body {
   height: 100%;
 }
+/* 모바일 브라우저 UI/키보드로 인한 잘림 방지 */
+@supports (height: 100dvh) {
+  html, body { height: 100dvh; }
+}
 
 body {
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;

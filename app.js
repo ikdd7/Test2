@@ -292,6 +292,11 @@
     show("chat");
     messageInput.focus();
     sendOnline();
+    // 차별점(음성 변조) 발견성: 첫 매칭 때 1회 안내
+    if (!state.hintShown) {
+      state.hintShown = true;
+      setTimeout(() => { if (state.phase === ST.CHATTING) toast("🎤 음성은 변조(굵게·높게·로봇)해서 보낼 수 있어요!"); }, 1400);
+    }
     // 인사용 핑(상대가 내 이름 알도록)
     publish(state.pairTopic, { t: "hello", from: state.id, name: state.nickname });
   }
@@ -619,6 +624,8 @@
   shareModal.addEventListener("click", (e) => { if (e.target === shareModal) shareModal.classList.add("hidden"); });
   $("#copy-link-btn").addEventListener("click", () => copyText(siteUrl(), "링크를 복사했어요 🔗"));
   $("#copy-msg-btn").addEventListener("click", () => copyText(siteMsg(), "공유 멘트를 복사했어요 ✏️"));
+  // ESC로 공유 모달 닫기
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") shareModal.classList.add("hidden"); });
 
   // ============================================================
   //  관리자 전용 접속자 수
