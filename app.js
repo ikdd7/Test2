@@ -684,8 +684,15 @@
   shareModal.addEventListener("click", (e) => { if (e.target === shareModal) shareModal.classList.add("hidden"); });
   $("#copy-link-btn").addEventListener("click", () => copyText(siteUrl(), "링크를 복사했어요 🔗"));
   $("#copy-msg-btn").addEventListener("click", () => copyText(siteMsg(), "공유 멘트를 복사했어요 ✏️"));
-  // ESC로 공유 모달 닫기
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") shareModal.classList.add("hidden"); });
+  // ESC: 열린 모달/패널 닫기
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!emojiPanel.classList.contains("hidden")) { emojiPanel.classList.add("hidden"); return; }
+    if (!shareModal.classList.contains("hidden")) { shareModal.classList.add("hidden"); return; }
+    if (!leftOverlay.classList.contains("hidden")) {
+      leftOverlay.classList.add("hidden"); state.phase = ST.IDLE; sendOnline(); show("start");
+    }
+  });
 
   // ============================================================
   //  관리자 전용 접속자 수
