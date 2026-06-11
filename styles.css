@@ -573,3 +573,25 @@ body {
 /* 신고 버튼 */
 .report-btn { font-size: 17px; }
 .report-btn:hover { background: rgba(255, 109, 139, 0.18); }
+
+/* 약관/정책 페이지 */
+.legal {
+  position: relative; z-index: 1;
+  max-width: 720px; margin: 0 auto; padding: 40px 22px 80px;
+  height: 100%; overflow-y: auto;
+}
+.legal-back { display: inline-block; margin-bottom: 18px; color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+.legal-back:hover { text-decoration: underline; }
+.legal h1 { font-size: 26px; margin-bottom: 14px; }
+.legal h2 { font-size: 17px; margin: 26px 0 8px; }
+.legal p, .legal li { font-size: 14px; line-height: 1.7; color: var(--text-dim); }
+.legal ul { padding-left: 20px; margin: 6px 0; }
+.legal strong { color: var(--text); }
+.legal-note { background: rgba(255,109,139,0.1); border: 1px solid rgba(255,109,139,0.3); border-radius: 12px; padding: 12px 14px; color: var(--text) !important; }
+.legal-updated { margin-top: 30px; font-size: 12px; color: #5d6b8c; }
+
+/* 시작화면 푸터 링크 */
+.legal-links { margin-top: 12px; text-align: center; font-size: 12px; }
+.legal-links a { color: var(--text-dim); text-decoration: none; }
+.legal-links a:hover { color: var(--accent); text-decoration: underline; }
+.legal-links span { color: #3d4a66; margin: 0 8px; }
