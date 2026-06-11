@@ -34,6 +34,7 @@
     pairTopic: null,
     pendingInvite: null,       // { to, room, timer }
     waiting: new Map(),        // id -> { name, lastSeen }
+    blocked: new Set(),        // 이번 세션 동안 차단한 상대 id (새로고침 시 초기화)
     online: new Map(),         // id -> { st, lastSeen }  (관리자용)
     typingTimer: null,
     lastSender: null,
@@ -196,9 +197,12 @@
     const now = Date.now();
     for (const [id, w] of state.waiting) if (now - w.lastSeen > WAIT_TIMEOUT) state.waiting.delete(id);
     if (state.waiting.size === 0) return;
-    // 가장 작은 id 후보 선택
+    // 가장 작은 id 후보 선택 (차단한 상대 제외)
     let cand = null;
-    for (const id of state.waiting.keys()) if (cand === null || id < cand) cand = id;
+    for (const id of state.waiting.keys()) {
+      if (state.blocked.has(id)) continue;
+      if (cand === null || id < cand) cand = id;
+    }
     if (cand === null) return;
     // 내 id가 더 작으면 내가 초대, 아니면 초대를 기다림
     if (state.id < cand) sendInvite(cand);
@@ -220,6 +224,11 @@
 
   function onInbox(d) {
     if (!d || !d.t) return;
+    // 차단한 상대의 초대/수락은 거절 (busy 응답으로 상대도 다음 후보로 넘어가게)
+    if (state.blocked.has(d.from) && (d.t === "invite" || d.t === "accept")) {
+      publish(inbox(d.from), { t: "busy", from: state.id });
+      return;
+    }
     switch (d.t) {
       case "invite": {
         if (state.phase === ST.SEARCHING) {
@@ -409,6 +418,13 @@
     if (recState.recording) cancelRecording();
   }
 
+  $("#block-btn").addEventListener("click", () => {
+    if (state.phase !== ST.CHATTING || !state.partnerId) return;
+    state.blocked.add(state.partnerId);
+    toast("이 상대를 차단했어요. 이번 접속 동안은 다시 만나지 않아요 🚫");
+    endChat(false);
+    startSearching();
+  });
   $("#next-btn").addEventListener("click", () => { endChat(false); startSearching(); });
   $("#leave-btn").addEventListener("click", () => { endChat(false); state.phase = ST.IDLE; sendOnline(); show("start"); });
   $("#cancel-search-btn").addEventListener("click", () => { stopSearching(); state.phase = ST.IDLE; sendOnline(); show("start"); });

@@ -543,3 +543,7 @@ body {
 .left-emoji { font-size: 48px; margin-bottom: 8px; animation: bob 2.5s ease-in-out infinite; }
 .modal-card.small .btn-primary { margin-top: 16px; }
 .modal-card.small .btn-ghost { width: 100%; }
+
+/* 차단 버튼 */
+.block-btn { color: var(--danger); border-color: rgba(255, 109, 139, 0.35); }
+.block-btn:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
