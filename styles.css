@@ -507,10 +507,20 @@ body {
 
 /* 녹음 바 */
 .recording-bar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: rgba(13, 18, 33, 0.9); border-top: 1px solid var(--border);
 }
+.rec-fx { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.fx-chip {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.fx-chip:hover { background: var(--surface-2); }
+.fx-chip:active { transform: scale(0.95); }
+.fx-chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(109,139,255,0.35); }
+.rec-row { display: flex; align-items: center; gap: 12px; }
 .rec-cancel, .rec-send {
   width: 42px; height: 42px; flex-shrink: 0; border-radius: 50%;
   border: none; cursor: pointer; font-size: 18px; font-weight: 700;
@@ -547,3 +557,11 @@ body {
 /* 차단 버튼 */
 .block-btn { color: var(--danger); border-color: rgba(255, 109, 139, 0.35); }
 .block-btn:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* 음성 변조 배지 */
+.voice-fx-badge {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  background: rgba(255,255,255,0.18); color: inherit;
+  padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+}
+.msg-row.me .voice-fx-badge { background: rgba(255,255,255,0.26); }

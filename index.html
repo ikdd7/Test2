@@ -62,7 +62,7 @@
       <div class="brand">
         <div class="brand-logo">💬</div>
         <h1>Ripple</h1>
-        <p class="tagline">버튼 하나로 낯선 사람과 1:1 랜덤 채팅</p>
+        <p class="tagline">버튼 하나로 낯선 사람과 1:1 랜덤 채팅<br/><span style="color:var(--accent)">🎙️ 목소리 변조</span>로 정체 숨기고 음성 대화까지</p>
       </div>
 
       <form id="start-form" class="join-form" autocomplete="off">
@@ -147,13 +147,21 @@
       </button>
     </footer>
 
-    <!-- 녹음 중 바 -->
+    <!-- 녹음 중 바 (음성 변조 선택) -->
     <div class="recording-bar hidden" id="recording-bar">
-      <button class="rec-cancel" id="rec-cancel" title="취소">✕</button>
-      <span class="rec-dot"></span>
-      <span class="rec-time" id="rec-time">0:00</span>
-      <span class="rec-hint">녹음 중… 체크를 누르면 전송</span>
-      <button class="rec-send" id="rec-send" title="전송">✓</button>
+      <div class="rec-fx" id="rec-fx">
+        <button type="button" class="fx-chip active" data-fx="none">🎙️ 기본</button>
+        <button type="button" class="fx-chip" data-fx="deep">🐻 굵게</button>
+        <button type="button" class="fx-chip" data-fx="high">🐿️ 높게</button>
+        <button type="button" class="fx-chip" data-fx="robot">🤖 로봇</button>
+      </div>
+      <div class="rec-row">
+        <button class="rec-cancel" id="rec-cancel" title="취소">✕</button>
+        <span class="rec-dot"></span>
+        <span class="rec-time" id="rec-time">0:00</span>
+        <span class="rec-hint">변조 고르고 ✓ 전송</span>
+        <button class="rec-send" id="rec-send" title="전송">✓</button>
+      </div>
     </div>
   </section>
 

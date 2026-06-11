@@ -381,19 +381,31 @@
     const { row, body } = rowFor(isMe, grouped);
     if (!isMe && !grouped) body.innerHTML = `<div class="msg-name">${escapeHtml(state.partnerName)}</div>`;
     const dur = data.dur || 0;
+    const fxKey = data.fx || "none";
+    const meta = VOICE_FX[fxKey] || VOICE_FX.none;
+    const badge = meta.label ? `<span class="voice-fx-badge">${meta.label}</span>` : "";
     const bubble = document.createElement("div");
     bubble.className = "bubble voice-bubble";
     bubble.innerHTML = `
       <button class="voice-play" aria-label="재생">▶</button>
       <span class="voice-wave">${'<i></i>'.repeat(14)}</span>
-      <span class="voice-dur">${fmtTime(dur)}</span>`;
-    const audio = new Audio(data.audio);
+      <span class="voice-dur">${fmtTime(dur)}</span>${badge}`;
     const playBtn = bubble.querySelector(".voice-play");
+    let player = null;
     playBtn.addEventListener("click", () => {
-      if (audio.paused) { audio.play(); playBtn.textContent = "❚❚"; bubble.classList.add("playing"); }
-      else { audio.pause(); playBtn.textContent = "▶"; bubble.classList.remove("playing"); }
+      if (!player) {
+        player = makeVoicePlayer(data.audio, fxKey);
+        player.audio.addEventListener("ended", () => {
+          playBtn.textContent = "▶"; bubble.classList.remove("playing");
+          player.cleanup(); player = null;
+        });
+        player.audio.play(); playBtn.textContent = "❚❚"; bubble.classList.add("playing");
+      } else if (player.audio.paused) {
+        player.audio.play(); playBtn.textContent = "❚❚"; bubble.classList.add("playing");
+      } else {
+        player.audio.pause(); playBtn.textContent = "▶"; bubble.classList.remove("playing");
+      }
     });
-    audio.addEventListener("ended", () => { playBtn.textContent = "▶"; bubble.classList.remove("playing"); });
     body.appendChild(bubble);
     const time = document.createElement("div"); time.className = "msg-time"; time.textContent = timeNow();
     body.appendChild(time);
@@ -461,7 +473,42 @@
   // ============================================================
   //  음성 메시지 (MediaRecorder)
   // ============================================================
-  const recState = { recording: false, recorder: null, chunks: [], stream: null, start: 0, timer: null, mime: "" };
+  const recState = { recording: false, recorder: null, chunks: [], stream: null, start: 0, timer: null, mime: "", fx: "none" };
+
+  // 음성 변조 프리셋 (재생 시 적용)
+  const VOICE_FX = {
+    none:  { label: "",        rate: 1.0,  ring: 0  },
+    deep:  { label: "🐻 굵게",  rate: 0.78, ring: 0  },
+    high:  { label: "🐿️ 높게", rate: 1.45, ring: 0  },
+    robot: { label: "🤖 로봇",  rate: 1.0,  ring: 55 },
+  };
+  let playCtx = null;
+
+  // dataURL 음성을 fx 적용해 재생할 수 있는 audio 핸들 생성
+  function makeVoicePlayer(dataUrl, fxKey) {
+    const fx = VOICE_FX[fxKey] || VOICE_FX.none;
+    const audio = new Audio(dataUrl);
+    // 피치 변조: 재생 속도를 바꾸되 피치 보존을 끔
+    audio.preservesPitch = false;
+    audio.mozPreservesPitch = false;
+    audio.webkitPreservesPitch = false;
+    audio.playbackRate = fx.rate;
+    let cleanup = () => {};
+    if (fx.ring) {
+      try {
+        playCtx = playCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (playCtx.state === "suspended") playCtx.resume();
+        const src = playCtx.createMediaElementSource(audio);
+        const mod = playCtx.createGain(); mod.gain.value = 0; // 캐리어로 osc가 흔듦 → 링모듈레이션
+        const osc = playCtx.createOscillator(); osc.type = "sine"; osc.frequency.value = fx.ring;
+        osc.connect(mod.gain);
+        src.connect(mod); mod.connect(playCtx.destination);
+        osc.start();
+        cleanup = () => { try { osc.stop(); } catch (_) {} try { src.disconnect(); mod.disconnect(); } catch (_) {} };
+      } catch (_) { /* WebAudio 실패 시 일반 재생 */ }
+    }
+    return { audio, cleanup };
+  }
 
   function pickMime() {
     const cands = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
@@ -522,7 +569,7 @@
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result; // data:...;base64,...
-      const msg = { t: "voice", from: state.id, name: state.nickname, audio: dataUrl, dur, ts: Date.now() };
+      const msg = { t: "voice", from: state.id, name: state.nickname, audio: dataUrl, dur, fx: recState.fx, ts: Date.now() };
       if (state.phase === ST.CHATTING && state.pairTopic) {
         publish(state.pairTopic, msg);
         renderVoice(msg, true);
@@ -534,6 +581,15 @@
   micBtn.addEventListener("click", startRecording);
   $("#rec-send").addEventListener("click", stopRecording);
   $("#rec-cancel").addEventListener("click", cancelRecording);
+
+  // 음성 변조 선택
+  document.querySelectorAll(".fx-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll(".fx-chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      recState.fx = chip.dataset.fx;
+    });
+  });
 
   // ---------- 이모지 ----------
   const EMOJIS = ["😀","😂","🥹","😊","😍","😎","🤩","🥳","😅","😭","😡","🤔","👍","👏","🙏","🔥","💯","✨","🎉","❤️","💜","💙","💚","😴","🤯","😱","🙄","😬","🤝","👀","🫶","🙌","💀","🤣","😏","😇","🥰","😘","🤗","🫡"];
