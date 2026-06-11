@@ -197,7 +197,7 @@
   // ============================================================
   //  매칭 (로비 + 핸드셰이크)
   // ============================================================
-  let waitTimer = null, evalTimer = null;
+  let waitTimer = null, evalTimer = null, searchTimer = null;
 
   function startSearching() {
     state.phase = ST.SEARCHING;
@@ -208,12 +208,21 @@
     announceWait();
     clearInterval(waitTimer); waitTimer = setInterval(announceWait, WAIT_INTERVAL);
     clearInterval(evalTimer); evalTimer = setInterval(evaluateMatch, 1000);
+    // 경과 시간 안내
+    const t0 = Date.now();
+    const sub = $("#search-sub");
+    clearInterval(searchTimer);
+    searchTimer = setInterval(() => {
+      if (state.phase !== ST.SEARCHING || !state.connected) return;
+      const s = Math.floor((Date.now() - t0) / 1000);
+      if (sub) sub.textContent = `벌써 ${s}초째 찾고 있어요. 접속자가 적으면 시간이 걸릴 수 있어요.`;
+    }, 1000);
     sendOnline();
   }
 
   function stopSearching() {
-    clearInterval(waitTimer); clearInterval(evalTimer);
-    waitTimer = evalTimer = null;
+    clearInterval(waitTimer); clearInterval(evalTimer); clearInterval(searchTimer);
+    waitTimer = evalTimer = searchTimer = null;
     publish(LOBBY, { t: "unwait", id: state.id });
     try { state.client.unsubscribe(LOBBY); } catch (_) {}
   }
@@ -368,6 +377,7 @@
   function sendMessage() {
     const raw = messageInput.value.trim();
     if (!raw || state.phase !== ST.CHATTING) return;
+    if (!state.connected) { toast("연결이 끊겨 메시지를 보낼 수 없어요 🔌"); return; }
     // 도배 방지: 5초에 6개 초과 차단
     const now = Date.now();
     state.sendTimes = state.sendTimes.filter((t) => now - t < 5000);
@@ -635,9 +645,11 @@
     reader.onload = () => {
       const dataUrl = reader.result; // data:...;base64,...
       const msg = { t: "voice", from: state.id, name: state.nickname, audio: dataUrl, dur, fx: recState.fx, ts: Date.now() };
-      if (state.phase === ST.CHATTING && state.pairTopic) {
+      if (state.phase === ST.CHATTING && state.pairTopic && state.connected) {
         publish(state.pairTopic, msg);
         renderVoice(msg, true);
+      } else {
+        toast("연결이 끊겨 음성을 보낼 수 없어요 🔌");
       }
     };
     reader.readAsDataURL(blob);
