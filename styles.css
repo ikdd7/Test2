@@ -569,3 +569,7 @@ body {
   padding: 2px 8px; border-radius: 999px; margin-left: 6px;
 }
 .msg-row.me .voice-fx-badge { background: rgba(255,255,255,0.26); }
+
+/* 신고 버튼 */
+.report-btn { font-size: 17px; }
+.report-btn:hover { background: rgba(255, 109, 139, 0.18); }

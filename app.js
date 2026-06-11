@@ -445,6 +445,14 @@
     if (recState.recording) cancelRecording();
   }
 
+  $("#report-btn").addEventListener("click", () => {
+    if (state.phase !== ST.CHATTING || !state.partnerId) return;
+    if (!confirm("이 상대를 신고할까요?\n신고하면 즉시 차단되고 다음 상대를 찾습니다.")) return;
+    state.blocked.add(state.partnerId);
+    toast("신고하고 차단했어요 🚨");
+    endChat(false);
+    startSearching();
+  });
   $("#block-btn").addEventListener("click", () => {
     if (state.phase !== ST.CHATTING || !state.partnerId) return;
     state.blocked.add(state.partnerId);
