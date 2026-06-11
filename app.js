@@ -75,6 +75,11 @@
   function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
   function linkify(e) { return e.replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">${u}</a>`); }
   function timeNow() { return new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }); }
+  // 금칙어 필터 (badwords.js). 로드 실패 시 원문 그대로 통과.
+  function clean(text) {
+    try { return window.RippleFilter ? window.RippleFilter.filter(text) : { text, hit: false }; }
+    catch (_) { return { text, hit: false }; }
+  }
   const inbox = (id) => `${P}/u/${id}`;
   const LOBBY = `${P}/lobby`;
   const ONLINE = `${P}/online`;
@@ -276,7 +281,7 @@
     stopSearching();
     state.phase = ST.CHATTING;
     state.partnerId = partnerId;
-    state.partnerName = partnerName || "상대방";
+    state.partnerName = clean(partnerName || "상대방").text;
     state.pairTopic = pairTopicOf(room);
     state.lastSender = null;
     state.client.subscribe(state.pairTopic, { qos: 0 });
@@ -302,9 +307,11 @@
   function onPair(d) {
     if (!d || d.from === state.id) return;
     switch (d.t) {
-      case "hello":
-        if (d.name && d.name !== state.partnerName) { state.partnerName = d.name; partnerTitle.textContent = d.name; }
+      case "hello": {
+        const nm = clean(d.name || "").text;
+        if (nm && nm !== state.partnerName) { state.partnerName = nm; partnerTitle.textContent = nm; }
         break;
+      }
       case "msg": renderMessage(d, false); beep(); break;
       case "voice": renderVoice(d, false); beep(); break;
       case "typing": onTyping(d); break;
@@ -313,8 +320,10 @@
   }
 
   function sendMessage() {
-    const text = messageInput.value.trim();
-    if (!text || state.phase !== ST.CHATTING) return;
+    const raw = messageInput.value.trim();
+    if (!raw || state.phase !== ST.CHATTING) return;
+    const { text, hit } = clean(raw);
+    if (hit) toast("부적절한 표현은 가려져요 🙅");
     const msg = { t: "msg", from: state.id, name: state.nickname, text, ts: Date.now() };
     publish(state.pairTopic, msg);
     renderMessage(msg, true);
@@ -358,7 +367,8 @@
     const { row, body } = rowFor(isMe, grouped);
     const inner = [];
     if (!isMe && !grouped) inner.push(`<div class="msg-name">${escapeHtml(state.partnerName)}</div>`);
-    inner.push(`<div class="bubble">${linkify(escapeHtml(data.text))}</div>`);
+    // 받은 메시지도 한 번 더 필터 (상대 클라이언트가 구버전일 때 대비)
+    inner.push(`<div class="bubble">${linkify(escapeHtml(clean(data.text).text))}</div>`);
     inner.push(`<div class="msg-time">${timeNow()}</div>`);
     body.innerHTML = inner.join("");
     messagesEl.appendChild(row);
@@ -434,7 +444,7 @@
   // 시작
   startForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    state.nickname = curNick();
+    state.nickname = clean(curNick()).text;
     try { localStorage.setItem("ripple_nick", state.nickname); } catch (_) {}
     startSearching();
   });
