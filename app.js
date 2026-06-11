@@ -752,4 +752,11 @@
   initAdmin();
   updateConnUI();   // 연결 전: 시작 버튼 비활성 + "연결 중…"
   connect();
+  // 최초 1회 안전 안내
+  try {
+    if (!localStorage.getItem("ripple_safety_seen")) {
+      setTimeout(() => toast("서로 존중해주세요 · 불쾌하면 차단/신고할 수 있어요 🤝"), 1800);
+      localStorage.setItem("ripple_safety_seen", "1");
+    }
+  } catch (_) {}
 })();
