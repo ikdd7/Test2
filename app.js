@@ -117,6 +117,33 @@
     } catch (_) {}
   }
 
+  // ---------- 백그라운드 대기: 매칭 알림 ----------
+  const ORIG_TITLE = document.title;
+  let titleBlink = null;
+  function startTitleAlert(msg) {
+    if (titleBlink) return;
+    let on = false;
+    titleBlink = setInterval(() => { document.title = on ? ORIG_TITLE : msg; on = !on; }, 900);
+  }
+  function stopTitleAlert() { if (titleBlink) { clearInterval(titleBlink); titleBlink = null; } document.title = ORIG_TITLE; }
+  window.addEventListener("focus", stopTitleAlert);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) stopTitleAlert(); });
+
+  function notifyMatch() {
+    beep();
+    const away = document.hidden || (document.hasFocus && !document.hasFocus());
+    if (!away) return;
+    startTitleAlert("💬 상대 연결됨!");
+    try {
+      if ("Notification" in window && Notification.permission === "granted") {
+        const n = new Notification("Ripple · 매칭 완료", {
+          body: "상대를 찾았어요! 들어와서 대화하세요 👋", icon: "icon-192.png", tag: "ripple-match",
+        });
+        n.onclick = () => { window.focus(); stopTitleAlert(); n.close(); };
+      }
+    } catch (_) {}
+  }
+
   // ---------- 시작 화면 미리보기 ----------
   function curNick() { return (nicknameInput.value.trim() || "익명"); }
   function updatePreview() {
@@ -203,6 +230,8 @@
     state.phase = ST.SEARCHING;
     state.partnerId = null; state.pairTopic = null; state.pendingInvite = null;
     state.waiting.clear();
+    // 백그라운드 대기 알림 권한 요청 (사용자 제스처 시점)
+    try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (_) {}
     show("search");
     state.client.subscribe(LOBBY, { qos: 0 });
     announceWait();
@@ -334,6 +363,7 @@
     renderSystem("상대와 연결되었어요! 인사를 건네보세요 👋");
     show("chat");
     messageInput.focus();
+    notifyMatch();   // 백그라운드 대기 중이었다면 소리/웹알림/탭 제목으로 호출
     sendOnline();
     // 차별점(음성 변조) 발견성: 첫 매칭 때 1회 안내
     if (!state.hintShown) {

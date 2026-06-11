@@ -595,3 +595,10 @@ body {
 .legal-links a { color: var(--text-dim); text-decoration: none; }
 .legal-links a:hover { color: var(--accent); text-decoration: underline; }
 .legal-links span { color: #3d4a66; margin: 0 8px; }
+
+/* 백그라운드 대기 안내 */
+.search-bg-hint {
+  margin-top: 12px; font-size: 12.5px; color: var(--accent) !important;
+  background: rgba(109,139,255,0.1); border: 1px solid rgba(109,139,255,0.25);
+  border-radius: 999px; padding: 8px 16px; display: inline-block;
+}
