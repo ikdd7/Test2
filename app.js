@@ -117,6 +117,39 @@
     } catch (_) {}
   }
 
+  // ---------- 골든아워(매칭 피크 타임) ----------
+  // 분 단위(자정 기준) 피크 구간. 운영하며 실제 트래픽에 맞춰 조정하세요.
+  const PEAKS = [
+    { start: 12 * 60, end: 13 * 60 },   // 점심 12:00~13:00
+    { start: 21 * 60, end: 24 * 60 },   // 야간 21:00~24:00
+  ];
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function hhmm(min) { return pad2(Math.floor(min / 60) % 24) + ":" + pad2(min % 60); }
+  function updateGoldenHour() {
+    const el = $("#golden-hour");
+    if (!el) return;
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    // 현재 피크 안인가?
+    for (const p of PEAKS) {
+      if (mins >= p.start && mins < p.end) {
+        el.classList.remove("hidden"); el.classList.add("active");
+        el.innerHTML = `🔥 <b>지금 매칭 피크 타임!</b> 평소보다 사람이 많아요 (~${hhmm(p.end)})`;
+        return;
+      }
+    }
+    // 다음 피크 시각 계산
+    let nextStart = null;
+    for (const p of PEAKS) if (p.start > mins) { nextStart = p.start; break; }
+    const target = new Date(now);
+    if (nextStart === null) { target.setDate(target.getDate() + 1); nextStart = PEAKS[0].start; }
+    target.setHours(Math.floor(nextStart / 60), nextStart % 60, 0, 0);
+    let diff = Math.max(0, Math.floor((target - now) / 1000));
+    const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
+    el.classList.remove("hidden", "active");
+    el.innerHTML = `⏰ 다음 매칭 피크 <b>${hhmm(nextStart)}</b> 까지 <b>${pad2(h)}:${pad2(m)}:${pad2(s)}</b>`;
+  }
+
   // ---------- 백그라운드 대기: 매칭 알림 ----------
   const ORIG_TITLE = document.title;
   let titleBlink = null;
@@ -781,6 +814,8 @@
   // ---------- 부팅 ----------
   initAdmin();
   updateConnUI();   // 연결 전: 시작 버튼 비활성 + "연결 중…"
+  updateGoldenHour();
+  setInterval(updateGoldenHour, 1000);
   connect();
   // 최초 1회 안전 안내
   try {
