@@ -1,6 +1,6 @@
 {
-  "name": "Ripple · 랜덤 1:1 채팅",
-  "short_name": "Ripple",
+  "name": "블러챗 · 랜덤 1:1 채팅",
+  "short_name": "블러챗",
   "description": "가입 없이 낯선 사람과 1:1 랜덤 채팅. 텍스트와 음성 변조 메시지 지원.",
   "start_url": "./",
   "scope": "./",

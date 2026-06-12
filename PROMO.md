@@ -1,4 +1,4 @@
-# 📣 Ripple 홍보 키트 (입소문용)
+# 📣 BlurChat 홍보 키트 (입소문용)
 
 > 그대로 복사해서 붙여넣을 수 있는 홍보 문구 모음입니다.
 > **사이트 주소:** https://ikdd7.github.io/Test2/
@@ -31,7 +31,7 @@ https://ikdd7.github.io/Test2/
 
 ## 🐦 X (트위터)
 ```
-주말 사이드 프로젝트 💬 "Ripple"
+주말 사이드 프로젝트 💬 "BlurChat"
 - 가입 없이 버튼 하나로 낯선 사람과 1:1 랜덤 매칭
 - 텍스트 + 음성 메시지 지원
 - 메시지 저장 안 함 (완전 익명)
@@ -51,7 +51,7 @@ https://ikdd7.github.io/Test2/
 ### Reddit — r/InternetIsBeautiful, r/SideProject, r/webdev
 **Title:** I built a no-signup, 1:1 random chat with voice messages — instant match, fully anonymous
 ```
-Made a tiny random chat site: Ripple.
+Made a tiny random chat site: BlurChat.
 - No sign-up. One button → matched 1:1 with a stranger.
 - Text + voice messages.
 - Nothing stored anywhere — fully ephemeral & anonymous.
@@ -64,7 +64,7 @@ Try it: https://ikdd7.github.io/Test2/
 - **Tagline:** No sign-up 1:1 random chat — with voice messages.
 - **Description:**
 ```
-Ripple instantly matches you 1:1 with a stranger. No accounts, no apps —
+BlurChat instantly matches you 1:1 with a stranger. No accounts, no apps —
 hit one button and you're chatting with text or voice. Nothing is stored,
 so it's fully anonymous and ephemeral. Built as a static site with
 serverless matchmaking over WebSocket.

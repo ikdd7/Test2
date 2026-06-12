@@ -1,5 +1,5 @@
 /* ============================================================
- * Ripple · 랜덤 1:1 채팅
+ * 블러챗(BlurChat) · 랜덤 1:1 채팅
  * - 서버리스 매칭: 공개 MQTT 브로커(WebSocket) 위에서 로비/핸드셰이크
  * - 음성 메시지: MediaRecorder → MQTT 전송 → 재생
  * - 접속자 수: 관리자(?admin=KEY)만 보는 플로팅 배지
@@ -169,7 +169,7 @@
     startTitleAlert("💬 상대 연결됨!");
     try {
       if ("Notification" in window && Notification.permission === "granted") {
-        const n = new Notification("Ripple · 매칭 완료", {
+        const n = new Notification("블러챗 · 매칭 완료", {
           body: "상대를 찾았어요! 들어와서 대화하세요 👋", icon: "icon-192.png", tag: "ripple-match",
         });
         n.onclick = () => { window.focus(); stopTitleAlert(); n.close(); };
@@ -746,7 +746,7 @@
   // ============================================================
   const shareModal = $("#share-modal");
   const siteUrl = () => `${location.origin}${location.pathname}`;
-  const siteMsg = () => `💬 낯선 사람과 1:1로 떠드는 랜덤 채팅 'Ripple'!\n가입 없이 클릭하면 바로 매칭 👇\n${siteUrl()}`;
+  const siteMsg = () => `💬 낯선 사람과 1:1로 떠드는 랜덤 채팅 '블러챗'!\n가입 없이 클릭하면 바로 매칭 👇\n${siteUrl()}`;
   function openShare() {
     $("#share-link-input").value = siteUrl();
     $("#invite-text").value = siteMsg();
