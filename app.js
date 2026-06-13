@@ -20,6 +20,8 @@
   const TYPING_TIMEOUT = 3000;
   const VOICE_MAX_BYTES = 200 * 1024;      // 음성 최대 크기(약 200KB)
   const VOICE_MAX_SEC = 60;
+  const PAIR_PING_INTERVAL = 4000;         // 대화 중 생존 핑 주기
+  const PAIR_TIMEOUT = 14000;              // 핑이 이 시간 끊기면 상대 나감 처리
 
   // ---------- 상태 ----------
   const ST = { IDLE: "idle", SEARCHING: "searching", INVITING: "inviting", CHATTING: "chatting" };
@@ -31,6 +33,7 @@
     phase: ST.IDLE,
     partnerId: null,
     partnerName: "상대방",
+    partnerLastSeen: 0,        // 상대 마지막 신호 시각 (이탈 감지)
     pairTopic: null,
     pendingInvite: null,       // { to, room, timer }
     waiting: new Map(),        // id -> { name, lastSeen }
@@ -390,6 +393,7 @@
     state.lastSender = null;
     state.sendTimes = []; state.recvTimes = []; state.lastText = ""; state.repeat = 0;
     state.client.subscribe(state.pairTopic, { qos: 0 });
+    startPairTimers();
     messagesEl.innerHTML = "";
     partnerTitle.textContent = state.partnerName;
     setConn(true);
@@ -415,9 +419,30 @@
   // ============================================================
   //  1:1 채팅
   // ============================================================
+  // 대화 중 생존 핑: 상대가 페이지를 나가면 핑이 끊겨 자동 이탈 처리
+  let pairPingTimer = null, pairCheckTimer = null;
+  function startPairTimers() {
+    state.partnerLastSeen = Date.now();
+    clearInterval(pairPingTimer); clearInterval(pairCheckTimer);
+    pairPingTimer = setInterval(() => {
+      if (state.phase === ST.CHATTING) publish(state.pairTopic, { t: "ping", from: state.id });
+    }, PAIR_PING_INTERVAL);
+    pairCheckTimer = setInterval(() => {
+      if (state.phase !== ST.CHATTING) return;
+      if (!state.connected) { state.partnerLastSeen = Date.now(); return; }  // 내 연결 끊김은 제외
+      if (Date.now() - state.partnerLastSeen > PAIR_TIMEOUT) partnerLeft();
+    }, 3000);
+  }
+  function clearPairTimers() {
+    clearInterval(pairPingTimer); clearInterval(pairCheckTimer);
+    pairPingTimer = pairCheckTimer = null;
+  }
+
   function onPair(d) {
     if (!d || d.from === state.id) return;
+    state.partnerLastSeen = Date.now();   // 상대 신호 수신 → 생존 갱신
     switch (d.t) {
+      case "ping": break;
       case "hello": {
         const nm = clean(d.name || "").text;
         if (nm && nm !== state.partnerName) { state.partnerName = nm; partnerTitle.textContent = nm; }
@@ -552,6 +577,7 @@
   // ---------- 종료 / 다음 ----------
   function partnerLeft() {
     if (state.phase !== ST.CHATTING) return;
+    clearPairTimers();
     state.phase = ST.IDLE;
     if (state.pairTopic) { try { state.client.unsubscribe(state.pairTopic); } catch (_) {} }
     typingIndicator.classList.add("hidden");
@@ -560,6 +586,7 @@
   }
 
   function endChat(silent) {
+    clearPairTimers();
     if (state.pairTopic) {
       if (!silent) publish(state.pairTopic, { t: "bye", from: state.id });
       try { state.client.unsubscribe(state.pairTopic); } catch (_) {}
@@ -806,10 +833,12 @@
   }
 
   // ---------- 페이지 종료 ----------
-  window.addEventListener("beforeunload", () => {
+  function onLeavePage() {
     if (state.phase === ST.CHATTING && state.pairTopic) publish(state.pairTopic, { t: "bye", from: state.id });
     else if (state.phase === ST.SEARCHING) publish(LOBBY, { t: "unwait", id: state.id });
-  });
+  }
+  window.addEventListener("beforeunload", onLeavePage);
+  window.addEventListener("pagehide", onLeavePage);
 
   // ---------- 부팅 ----------
   initAdmin();
