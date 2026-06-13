@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ikdd7.github.io/Test2/sitemap.xml
+Sitemap: https://ikdd7.github.io/chat/sitemap.xml

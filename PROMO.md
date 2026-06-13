@@ -1,7 +1,7 @@
 # 📣 BlurChat 홍보 키트 (입소문용)
 
 > 그대로 복사해서 붙여넣을 수 있는 홍보 문구 모음입니다.
-> **사이트 주소:** https://ikdd7.github.io/Test2/
+> **사이트 주소:** https://ikdd7.github.io/chat/
 > **공유 카드 이미지:** `og.png` (링크 붙이면 자동으로 뜸)
 > **콘셉트:** 가입 없이 버튼 하나로 **낯선 사람과 1:1 랜덤 채팅** (텍스트 + 음성)
 
@@ -18,14 +18,14 @@
 ```
 💬 가입 없이 낯선 사람이랑 1:1로 떠드는 랜덤채팅 ㄱㄱ
 목소리(음성)도 보낼 수 있음 👇 (클릭하면 바로 매칭)
-https://ikdd7.github.io/Test2/
+https://ikdd7.github.io/chat/
 ```
 
 ## 📸 인스타 스토리 / 쓰레드
 ```
 심심한 사람 다 들어와 🫠 가입 없이 1:1 랜덤채팅.
 텍스트 + 음성까지 됨. 클릭하면 바로 매칭.
-👉 ikdd7.github.io/Test2
+👉 ikdd7.github.io/chat
 ```
 > 스토리엔 **QR 스티커**(공유 모달의 QR 캡처)를 같이 올리면 전환율 ↑
 
@@ -35,13 +35,13 @@ https://ikdd7.github.io/Test2/
 - 가입 없이 버튼 하나로 낯선 사람과 1:1 랜덤 매칭
 - 텍스트 + 음성 메시지 지원
 - 메시지 저장 안 함 (완전 익명)
-https://ikdd7.github.io/Test2/
+https://ikdd7.github.io/chat/
 ```
 
 ## 🎓 에브리타임 / 대학 커뮤니티
 ```
 시험기간 현타 올 때 잠깐 떠들 사람? 익명 1:1 랜덤채팅 ☕
-가입 없이 바로 매칭 → https://ikdd7.github.io/Test2/
+가입 없이 바로 매칭 → https://ikdd7.github.io/chat/
 ```
 
 ---
@@ -57,7 +57,7 @@ Made a tiny random chat site: BlurChat.
 - Nothing stored anywhere — fully ephemeral & anonymous.
 - 100% static site; matchmaking & realtime over MQTT-over-WebSocket.
 
-Try it: https://ikdd7.github.io/Test2/
+Try it: https://ikdd7.github.io/chat/
 ```
 
 ### Product Hunt — tagline & description
@@ -88,7 +88,7 @@ serverless matchmaking over WebSocket.
 ## 🔑 관리자(나)만 보는 접속자 수
 접속자 수는 일반 사용자에게 안 보입니다. **나만** 보려면 주소 뒤에 관리자 키를 붙이세요:
 ```
-https://ikdd7.github.io/Test2/?admin=ripple-admin-2026
+https://ikdd7.github.io/chat/?admin=ripple-admin-2026
 ```
 → 우측 상단에 `🟢 N 온라인 · N 대기 · N 대화` 배지가 나타납니다.
 ⚠️ 이 키는 코드(`app.js`의 `ADMIN_KEY`)에 들어있는 값이라 **반드시 본인만 아는 값으로 변경**하세요. (정적 사이트라 완벽한 비밀은 아님 — 가벼운 차단 수준)

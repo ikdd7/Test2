@@ -3,7 +3,7 @@
 가입 없이 **버튼 하나로 낯선 사람과 1:1 랜덤 채팅**을 시작하는 서버리스 웹앱입니다.
 텍스트와 **음성 메시지**를 주고받을 수 있고, 마음에 안 들면 "다음 상대"로 넘어갑니다.
 
-> **데모:** https://ikdd7.github.io/Test2/ (GitHub Pages 자동 배포)
+> **데모:** https://ikdd7.github.io/chat/ (GitHub Pages 자동 배포)
 
 ## ✨ 특징
 
