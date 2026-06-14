@@ -672,3 +672,20 @@ body {
 /* 입력 placeholder 부드럽게 */
 .field input::placeholder, #message-input::placeholder { color: #c4b6cc; }
 .footnote, .msg-time, .legal-updated { color: #b3a6bd; }
+
+/* 관심사(덕질 주제) 선택 칩 */
+.topic-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.topic-chip {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.topic-chip:hover { background: var(--surface-2); transform: translateY(-1px); }
+.topic-chip:active { transform: scale(0.96); }
+.topic-chip.active {
+  background: var(--accent-grad); color: #fff; border-color: transparent;
+  box-shadow: 0 4px 12px rgba(255, 143, 163, 0.35);
+}
+
+/* 시작 화면 세로 넘침 방지 */
+.join-screen { overflow-y: auto; }

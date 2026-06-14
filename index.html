@@ -67,12 +67,24 @@
       <div class="brand">
         <div class="brand-logo">💬</div>
         <h1>블러챗</h1>
-        <p class="tagline">버튼 하나로 낯선 사람과 1:1 랜덤 채팅<br/><span style="color:var(--accent)">🎙️ 목소리 변조</span>로 정체 숨기고 음성 대화까지</p>
+        <p class="tagline">같은 걸 덕질하는 낯선 사람과 익명 1:1 수다 🎈<br/><span style="color:var(--accent)">최애 얘기 실컷</span> 할 사람, 여기서 만나요</p>
       </div>
 
       <div id="golden-hour" class="golden-hour hidden"></div>
 
       <form id="start-form" class="join-form" autocomplete="off">
+        <div class="field">
+          <span>무슨 얘기 하고 싶어요?</span>
+          <div class="topic-grid" id="topic-grid">
+            <button type="button" class="topic-chip active" data-topic="그냥 수다">💬 그냥 수다</button>
+            <button type="button" class="topic-chip" data-topic="K-POP·아이돌">🎤 K-POP·아이돌</button>
+            <button type="button" class="topic-chip" data-topic="게임">🎮 게임</button>
+            <button type="button" class="topic-chip" data-topic="애니·만화">🍙 애니·만화</button>
+            <button type="button" class="topic-chip" data-topic="웹툰·웹소설">📚 웹툰·웹소설</button>
+            <button type="button" class="topic-chip" data-topic="드라마·영화">🎬 드라마·영화</button>
+            <button type="button" class="topic-chip" data-topic="스포츠">⚽ 스포츠</button>
+          </div>
+        </div>
         <label class="field">
           <span>닉네임</span>
           <input id="nickname-input" type="text" maxlength="20" placeholder="비워두면 '익명'으로 시작" />
@@ -87,7 +99,7 @@
         </div>
 
         <button type="submit" class="btn-primary" id="start-btn">
-          <span>🎲 랜덤 매칭 시작</span>
+          <span>🎈 같은 팬 찾기</span>
         </button>
       </form>
 
@@ -109,7 +121,7 @@
         <span class="radar-ring"></span>
         <div class="radar-core">🔍</div>
       </div>
-      <h2>상대를 찾는 중…</h2>
+      <h2 id="search-title">상대를 찾는 중…</h2>
       <p id="search-sub">잠시만 기다려 주세요. 접속자가 적으면 시간이 걸릴 수 있어요.</p>
       <p class="search-bg-hint">🔔 다른 탭에서 다른 일 하셔도 돼요 — 매칭되면 알려드릴게요</p>
       <button class="btn-ghost" id="cancel-search-btn">취소</button>

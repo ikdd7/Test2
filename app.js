@@ -22,6 +22,7 @@
   const VOICE_MAX_SEC = 60;
   const PAIR_PING_INTERVAL = 4000;         // 대화 중 생존 핑 주기
   const PAIR_TIMEOUT = 14000;              // 핑이 이 시간 끊기면 상대 나감 처리
+  const BROADEN_AFTER = 15000;             // 같은 관심사 못 찾으면 이 시간 뒤 전체로 확대
 
   // ---------- 상태 ----------
   const ST = { IDLE: "idle", SEARCHING: "searching", INVITING: "inviting", CHATTING: "chatting" };
@@ -34,6 +35,9 @@
     partnerId: null,
     partnerName: "상대방",
     partnerLastSeen: 0,        // 상대 마지막 신호 시각 (이탈 감지)
+    interest: "그냥 수다",      // 내가 고른 관심사(덕질 주제)
+    partnerInterest: "",       // 매칭된 상대의 관심사
+    searchStart: 0,            // 검색 시작 시각 (관심사 확대 타이밍)
     pairTopic: null,
     pendingInvite: null,       // { to, room, timer }
     waiting: new Map(),        // id -> { name, lastSeen }
@@ -206,7 +210,7 @@
     if (startBtn) {
       startBtn.disabled = !ok;
       const span = startBtn.querySelector("span");
-      if (span) span.textContent = ok ? "🎲 랜덤 매칭 시작" : "🔌 연결 중…";
+      if (span) span.textContent = ok ? "🎈 같은 팬 찾기" : "🔌 연결 중…";
     }
     if (state.phase === ST.CHATTING) setConn(ok);
     if (state.phase === ST.SEARCHING) {
@@ -268,19 +272,27 @@
     state.waiting.clear();
     // 백그라운드 대기 알림 권한 요청 (사용자 제스처 시점)
     try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (_) {}
+    state.searchStart = Date.now();
     show("search");
+    const title = $("#search-title");
+    if (title) title.textContent = (state.interest && state.interest !== "그냥 수다")
+      ? `같은 '${state.interest}' 팬을 찾는 중…` : "상대를 찾는 중…";
     state.client.subscribe(LOBBY, { qos: 0 });
     announceWait();
     clearInterval(waitTimer); waitTimer = setInterval(announceWait, WAIT_INTERVAL);
     clearInterval(evalTimer); evalTimer = setInterval(evaluateMatch, 1000);
     // 경과 시간 안내
-    const t0 = Date.now();
+    const t0 = state.searchStart;
     const sub = $("#search-sub");
     clearInterval(searchTimer);
     searchTimer = setInterval(() => {
       if (state.phase !== ST.SEARCHING || !state.connected) return;
       const s = Math.floor((Date.now() - t0) / 1000);
-      if (sub) sub.textContent = `벌써 ${s}초째 찾고 있어요. 접속자가 적으면 시간이 걸릴 수 있어요.`;
+      if (!sub) return;
+      if (state.interest !== "그냥 수다" && (Date.now() - t0) > BROADEN_AFTER)
+        sub.textContent = `같은 팬이 안 보여서 전체에서 찾는 중이에요… (${s}초)`;
+      else
+        sub.textContent = `벌써 ${s}초째 찾고 있어요. 접속자가 적으면 시간이 걸릴 수 있어요.`;
     }, 1000);
     sendOnline();
   }
@@ -294,12 +306,12 @@
 
   function announceWait() {
     if (state.phase !== ST.SEARCHING) return;
-    publish(LOBBY, { t: "wait", id: state.id, name: state.nickname });
+    publish(LOBBY, { t: "wait", id: state.id, name: state.nickname, interest: state.interest });
   }
 
   function onLobby(d) {
     if (!d || d.id === state.id) return;
-    if (d.t === "wait") state.waiting.set(d.id, { name: d.name || "익명", lastSeen: Date.now() });
+    if (d.t === "wait") state.waiting.set(d.id, { name: d.name || "익명", interest: d.interest || "그냥 수다", lastSeen: Date.now() });
     else if (d.t === "unwait") state.waiting.delete(d.id);
   }
 
@@ -309,10 +321,13 @@
     const now = Date.now();
     for (const [id, w] of state.waiting) if (now - w.lastSeen > WAIT_TIMEOUT) state.waiting.delete(id);
     if (state.waiting.size === 0) return;
-    // 가장 작은 id 후보 선택 (차단한 상대 제외)
+    // '그냥 수다'거나, 같은 관심사를 일정 시간 못 찾으면 전체로 확대
+    const broaden = state.interest === "그냥 수다" || (now - state.searchStart) > BROADEN_AFTER;
+    // 후보 선택: (확대 전이면) 같은 관심사 + 미차단 중 가장 작은 id
     let cand = null;
-    for (const id of state.waiting.keys()) {
+    for (const [id, w] of state.waiting) {
       if (state.blocked.has(id)) continue;
+      if (!broaden && w.interest !== state.interest) continue;
       if (cand === null || id < cand) cand = id;
     }
     if (cand === null) return;
@@ -331,7 +346,7 @@
       }
     }, INVITE_TIMEOUT);
     state.pendingInvite = { to: toId, room, timer };
-    publish(inbox(toId), { t: "invite", from: state.id, name: state.nickname, room });
+    publish(inbox(toId), { t: "invite", from: state.id, name: state.nickname, room, interest: state.interest });
   }
 
   function onInbox(d) {
@@ -344,15 +359,15 @@
     switch (d.t) {
       case "invite": {
         if (state.phase === ST.SEARCHING) {
-          publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room });
-          beginChat(d.room, d.from, d.name);
+          publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room, interest: state.interest });
+          beginChat(d.room, d.from, d.name, d.interest);
         } else if (state.phase === ST.INVITING) {
           // 더 작은 id 초대자를 우선 → 내 초대 취소하고 수락
           if (d.from < state.id && state.pendingInvite) {
             publish(inbox(state.pendingInvite.to), { t: "cancel", from: state.id });
             clearTimeout(state.pendingInvite.timer); state.pendingInvite = null;
-            publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room });
-            beginChat(d.room, d.from, d.name);
+            publish(inbox(d.from), { t: "accept", from: state.id, name: state.nickname, room: d.room, interest: state.interest });
+            beginChat(d.room, d.from, d.name, d.interest);
           } else {
             publish(inbox(d.from), { t: "busy", from: state.id });
           }
@@ -365,7 +380,7 @@
         if (state.phase === ST.INVITING && state.pendingInvite && d.from === state.pendingInvite.to) {
           const room = state.pendingInvite.room;
           clearTimeout(state.pendingInvite.timer); state.pendingInvite = null;
-          beginChat(room, d.from, d.name);
+          beginChat(room, d.from, d.name, d.interest);
         } else {
           publish(inbox(d.from), { t: "busy", from: state.id });   // 이미 매칭됨
         }
@@ -384,11 +399,12 @@
     }
   }
 
-  function beginChat(room, partnerId, partnerName) {
+  function beginChat(room, partnerId, partnerName, partnerInterest) {
     stopSearching();
     state.phase = ST.CHATTING;
     state.partnerId = partnerId;
     state.partnerName = clean(partnerName || "상대방").text;
+    state.partnerInterest = partnerInterest || "";
     state.pairTopic = pairTopicOf(room);
     state.lastSender = null;
     state.sendTimes = []; state.recvTimes = []; state.lastText = ""; state.repeat = 0;
@@ -397,7 +413,11 @@
     messagesEl.innerHTML = "";
     partnerTitle.textContent = state.partnerName;
     setConn(true);
-    renderSystem("상대와 연결되었어요! 인사를 건네보세요 👋");
+    updatePresenceInterest();
+    const shared = state.interest === state.partnerInterest && state.interest !== "그냥 수다";
+    renderSystem(shared
+      ? `같은 '${state.interest}' 팬을 만났어요! 최애 얘기 시작해볼까요? 🎈`
+      : "상대와 연결되었어요! 인사를 건네보세요 👋");
     show("chat");
     messageInput.focus();
     notifyMatch();   // 백그라운드 대기 중이었다면 소리/웹알림/탭 제목으로 호출
@@ -407,13 +427,18 @@
       state.hintShown = true;
       setTimeout(() => { if (state.phase === ST.CHATTING) toast("🎤 음성은 변조(굵게·높게·로봇)해서 보낼 수 있어요!"); }, 1400);
     }
-    // 인사용 핑(상대가 내 이름 알도록)
-    publish(state.pairTopic, { t: "hello", from: state.id, name: state.nickname });
+    // 인사용 핑(상대가 내 이름·관심사 알도록)
+    publish(state.pairTopic, { t: "hello", from: state.id, name: state.nickname, interest: state.interest });
   }
 
   function setConn(ok) {
     connDot.className = "dot " + (ok ? "online" : "offline");
-    presenceText.textContent = ok ? "익명으로 연결됨" : "연결 끊김";
+    if (!ok) { presenceText.textContent = "연결 끊김"; return; }
+    updatePresenceInterest();
+  }
+  function updatePresenceInterest() {
+    const shared = state.interest && state.interest === state.partnerInterest && state.interest !== "그냥 수다";
+    presenceText.textContent = shared ? `🎈 ${state.interest} 팬끼리 · 익명 연결` : "익명으로 연결됨";
   }
 
   // ============================================================
@@ -446,6 +471,7 @@
       case "hello": {
         const nm = clean(d.name || "").text;
         if (nm && nm !== state.partnerName) { state.partnerName = nm; partnerTitle.textContent = nm; }
+        if (d.interest && !state.partnerInterest) { state.partnerInterest = d.interest; updatePresenceInterest(); }
         break;
       }
       case "msg": {
@@ -618,6 +644,15 @@
   $("#go-home-btn").addEventListener("click", () => { leftOverlay.classList.add("hidden"); state.phase = ST.IDLE; sendOnline(); show("start"); });
 
   // 시작
+  // 관심사(덕질 주제) 선택
+  document.querySelectorAll(".topic-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll(".topic-chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      state.interest = chip.dataset.topic || "그냥 수다";
+    });
+  });
+
   startForm.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!state.connected) { toast("연결 중이에요. 잠시 후 다시 시도해 주세요 🔌"); return; }
